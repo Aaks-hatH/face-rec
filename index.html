@@ -230,485 +230,549 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
     <script>
-        let stream = null;
-        let faces = [];
-        let modelsLoaded = false;
-        let isDetecting = false;
-        let isProcessing = false;
-        let currentMode = 'register';
+        // These keep track of what is happening in the app
+        let cameraStream = null;
+        let registeredFaces = [];
+        let aiModelsReady = false;
+        let currentlyDetectingFaces = false;
+        let currentlyProcessingFace = false;
+        let currentAppMode = 'register';
 
-        const video = document.getElementById('video');
-        const overlay = document.getElementById('overlay');
-        const canvas = document.getElementById('canvas');
-        const cameraBtn = document.getElementById('cameraBtn');
-        const cameraBtn2 = document.getElementById('cameraBtn2');
-        const nameInput = document.getElementById('nameInput');
-        const captureBtn = document.getElementById('captureBtn');
-        const fileInput = document.getElementById('fileInput');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const registerBtn = document.getElementById('registerBtn');
-        const recognizeBtn = document.getElementById('recognizeBtn');
-        const message = document.getElementById('message');
-        const faceList = document.getElementById('faceList');
-        const count = document.getElementById('count');
-        const registerMode = document.getElementById('registerMode');
-        const recognizeMode = document.getElementById('recognizeMode');
-        const clearAllBtn = document.getElementById('clearAllBtn');
+        // Get all the buttons and elements from the page
+        const videoElement = document.getElementById('video');
+        const overlayCanvas = document.getElementById('overlay');
+        const hiddenCanvas = document.getElementById('canvas');
+        const registerCameraButton = document.getElementById('cameraBtn');
+        const recognizeCameraButton = document.getElementById('cameraBtn2');
+        const nameInputField = document.getElementById('nameInput');
+        const captureButton = document.getElementById('captureBtn');
+        const fileInputField = document.getElementById('fileInput');
+        const uploadPhotoButton = document.getElementById('uploadBtn');
+        const registerModeButton = document.getElementById('registerBtn');
+        const recognizeModeButton = document.getElementById('recognizeBtn');
+        const messageBox = document.getElementById('message');
+        const faceListContainer = document.getElementById('faceList');
+        const faceCountBadge = document.getElementById('count');
+        const registerModeSection = document.getElementById('registerMode');
+        const recognizeModeSection = document.getElementById('recognizeMode');
+        const clearAllButton = document.getElementById('clearAllBtn');
 
-        // Load saved faces from localStorage on startup
-        function loadSavedFaces() {
+        // Try to load any faces that were saved before
+        function loadPreviouslySavedFaces() {
             try {
-                const saved = localStorage.getItem('registeredFaces');
-                if (saved) {
-                    faces = JSON.parse(saved);
-                    updateList();
-                    console.log('Loaded ' + faces.length + ' saved faces');
+                const savedFacesData = localStorage.getItem('registeredFaces');
+                if (savedFacesData) {
+                    registeredFaces = JSON.parse(savedFacesData);
+                    updateFaceList();
+                    console.log('Successfully loaded ' + registeredFaces.length + ' faces from previous session');
                 }
-            } catch (err) {
-                console.error('Error loading saved faces:', err);
+            } catch (error) {
+                console.error('Could not load saved faces:', error);
             }
         }
 
-        // Save faces to localStorage
-        function saveFaces() {
+        // Save all the registered faces so they don't disappear when closing the browser
+        function saveFacesToBrowser() {
             try {
-                localStorage.setItem('registeredFaces', JSON.stringify(faces));
-                console.log('Saved ' + faces.length + ' faces to storage');
-            } catch (err) {
-                console.error('Error saving faces:', err);
-                showMessage('Warning: Could not save to storage', 'error');
+                localStorage.setItem('registeredFaces', JSON.stringify(registeredFaces));
+                console.log('Successfully saved ' + registeredFaces.length + ' faces');
+            } catch (error) {
+                console.error('Could not save faces:', error);
+                showUserMessage('Warning: Could not save to storage', 'error');
             }
         }
 
-        async function loadModels() {
-            if (modelsLoaded) return;
+        // Download the AI models needed for face recognition
+        async function downloadAIModels() {
+            if (aiModelsReady) return;
             
-            showMessage('Loading AI models...', 'info');
-            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+            showUserMessage('Loading AI models...', 'info');
+            const modelStorageURL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
             
             try {
+                // Download all three models at the same time
                 await Promise.all([
-                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                    faceapi.nets.tinyFaceDetector.loadFromUri(modelStorageURL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(modelStorageURL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(modelStorageURL)
                 ]);
-                modelsLoaded = true;
-                showMessage('Ready to use!', 'success');
+                aiModelsReady = true;
+                showUserMessage('Ready to use!', 'success');
                 setTimeout(() => {
-                    message.style.display = 'none';
+                    messageBox.style.display = 'none';
                 }, 2000);
-            } catch (err) {
-                showMessage('Failed to load models. Check internet connection.', 'error');
-                console.error(err);
+            } catch (error) {
+                showUserMessage('Failed to load models. Check internet connection.', 'error');
+                console.error(error);
             }
         }
 
-        async function toggleCamera(mode) {
-            const btn = mode === 'register' ? cameraBtn : cameraBtn2;
+        // Turn the camera on or off
+        async function toggleCameraOnOff(modeType) {
+            const buttonToUse = modeType === 'register' ? registerCameraButton : recognizeCameraButton;
             
-            console.log('toggleCamera called with mode:', mode);
-            console.log('Current stream:', stream);
+            console.log('Camera button clicked in mode:', modeType);
+            console.log('Current camera status:', cameraStream);
             
-            if (stream) {
-                stream.getTracks().forEach(t => t.stop());
-                stream = null;
-                video.srcObject = null;
-                btn.textContent = 'Start Camera';
-                btn.className = 'btn btn-primary';
-                isDetecting = false;
-                showMessage('Camera stopped', 'info');
+            // If camera is already on, turn it off
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+                videoElement.srcObject = null;
+                buttonToUse.textContent = 'Start Camera';
+                buttonToUse.className = 'btn btn-primary';
+                currentlyDetectingFaces = false;
+                showUserMessage('Camera stopped', 'info');
                 
-                const ctx = overlay.getContext('2d');
-                ctx.clearRect(0, 0, overlay.width, overlay.height);
+                // Clear any drawn boxes on the screen
+                const drawingContext = overlayCanvas.getContext('2d');
+                drawingContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
                 return;
             }
 
-            if (!modelsLoaded) {
-                showMessage('Please wait, models are still loading...', 'error');
+            // Make sure AI models are ready before turning on camera
+            if (!aiModelsReady) {
+                showUserMessage('Please wait, models are still loading...', 'error');
                 return;
             }
 
-            btn.disabled = true;
-            showMessage('Starting camera...', 'info');
-            console.log('Requesting camera access...');
+            buttonToUse.disabled = true;
+            showUserMessage('Starting camera...', 'info');
+            console.log('Asking browser for camera permission...');
             
             try {
-                stream = await navigator.mediaDevices.getUserMedia({ 
+                // Ask the browser to access the webcam
+                cameraStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
                         width: { ideal: 640 },
                         height: { ideal: 480 }
                     } 
                 });
-                console.log('Camera stream obtained:', stream);
-                video.srcObject = stream;
+                console.log('Camera access granted:', cameraStream);
+                videoElement.srcObject = cameraStream;
                 
+                // Wait for the video to be ready
                 await new Promise(resolve => {
-                    video.onloadedmetadata = () => {
-                        console.log('Video metadata loaded');
-                        overlay.width = video.videoWidth;
-                        overlay.height = video.videoHeight;
+                    videoElement.onloadedmetadata = () => {
+                        console.log('Video is ready to use');
+                        overlayCanvas.width = videoElement.videoWidth;
+                        overlayCanvas.height = videoElement.videoHeight;
                         resolve();
                     };
                 });
                 
-                btn.textContent = 'Stop Camera';
-                btn.className = 'btn btn-danger';
-                btn.disabled = false;
-                showMessage('Camera active', 'success');
+                buttonToUse.textContent = 'Stop Camera';
+                buttonToUse.className = 'btn btn-danger';
+                buttonToUse.disabled = false;
+                showUserMessage('Camera active', 'success');
                 console.log('Camera started successfully');
                 
+                // Hide success message after a bit in register mode
                 setTimeout(() => {
-                    if (mode === 'register') {
-                        message.style.display = 'none';
+                    if (modeType === 'register') {
+                        messageBox.style.display = 'none';
                     }
                 }, 1500);
                 
-                if (mode === 'recognize') {
-                    console.log('Starting continuous detection...');
-                    startContinuousDetection();
+                // If in recognize mode, start looking for faces automatically
+                if (modeType === 'recognize') {
+                    console.log('Starting automatic face detection...');
+                    startLookingForFacesContinuously();
                 }
-            } catch (err) {
-                console.error('Camera error:', err);
-                showMessage('Camera error: ' + err.message, 'error');
-                btn.disabled = false;
-                btn.textContent = 'Start Camera';
-                btn.className = 'btn btn-primary';
+            } catch (error) {
+                console.error('Camera error:', error);
+                showUserMessage('Camera error: ' + error.message, 'error');
+                buttonToUse.disabled = false;
+                buttonToUse.textContent = 'Start Camera';
+                buttonToUse.className = 'btn btn-primary';
             }
         }
 
-        function switchMode(mode) {
-            currentMode = mode;
+        // Switch between register mode and recognize mode
+        function changeAppMode(newMode) {
+            currentAppMode = newMode;
             
-            if (stream) {
-                stream.getTracks().forEach(t => t.stop());
-                stream = null;
-                video.srcObject = null;
-                isDetecting = false;
+            // Turn off camera if it's running
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+                videoElement.srcObject = null;
+                currentlyDetectingFaces = false;
             }
             
-            cameraBtn.textContent = 'Start Camera';
-            cameraBtn.className = 'btn btn-primary';
-            cameraBtn2.textContent = 'Start Camera';
-            cameraBtn2.className = 'btn btn-primary';
+            // Reset both camera buttons
+            registerCameraButton.textContent = 'Start Camera';
+            registerCameraButton.className = 'btn btn-primary';
+            recognizeCameraButton.textContent = 'Start Camera';
+            recognizeCameraButton.className = 'btn btn-primary';
             
-            const ctx = overlay.getContext('2d');
-            ctx.clearRect(0, 0, overlay.width, overlay.height);
+            // Clear any drawn boxes
+            const drawingContext = overlayCanvas.getContext('2d');
+            drawingContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
             
-            if (mode === 'register') {
-                registerBtn.className = 'btn btn-active';
-                recognizeBtn.className = 'btn';
-                registerMode.style.display = 'block';
-                recognizeMode.style.display = 'none';
+            // Show the correct section based on mode
+            if (newMode === 'register') {
+                registerModeButton.className = 'btn btn-active';
+                recognizeModeButton.className = 'btn';
+                registerModeSection.style.display = 'block';
+                recognizeModeSection.style.display = 'none';
             } else {
-                registerBtn.className = 'btn';
-                recognizeBtn.className = 'btn btn-active';
-                registerMode.style.display = 'none';
-                recognizeMode.style.display = 'block';
+                registerModeButton.className = 'btn';
+                recognizeModeButton.className = 'btn btn-active';
+                registerModeSection.style.display = 'none';
+                recognizeModeSection.style.display = 'block';
             }
         }
 
-        function capture() {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-            return canvas.toDataURL('image/jpeg', 0.8);
+        // Take a picture from the camera
+        function takePictureFromCamera() {
+            hiddenCanvas.width = videoElement.videoWidth;
+            hiddenCanvas.height = videoElement.videoHeight;
+            hiddenCanvas.getContext('2d').drawImage(videoElement, 0, 0);
+            return hiddenCanvas.toDataURL('image/jpeg', 0.8);
         }
 
-        async function registerFaceFromCamera() {
-            if (isProcessing) {
-                console.log('Already processing, ignoring click');
+        // Register a face using the camera
+        async function registerNewFaceFromCamera() {
+            if (currentlyProcessingFace) {
+                console.log('Already working on a face, please wait');
                 return;
             }
             
-            const name = nameInput.value.trim();
-            if (!name) {
-                showMessage('Please enter a name', 'error');
-                nameInput.focus();
+            const personName = nameInputField.value.trim();
+            if (!personName) {
+                showUserMessage('Please enter a name', 'error');
+                nameInputField.focus();
                 return;
             }
-            if (!stream) {
-                showMessage('Please start camera first', 'error');
+            if (!cameraStream) {
+                showUserMessage('Please start camera first', 'error');
                 return;
             }
 
-            isProcessing = true;
-            captureBtn.disabled = true;
-            captureBtn.textContent = 'Detecting...';
-            showMessage('Detecting face...', 'info');
+            currentlyProcessingFace = true;
+            captureButton.disabled = true;
+            captureButton.textContent = 'Detecting...';
+            showUserMessage('Looking for a face...', 'info');
 
             try {
-                const detections = await faceapi
-                    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                // Use AI to find a face in the camera view
+                const foundFace = await faceapi
+                    .detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
                     .withFaceLandmarks()
                     .withFaceDescriptor();
 
-                if (!detections) {
-                    showMessage('No face detected. Try again.', 'error');
+                if (!foundFace) {
+                    showUserMessage('No face detected. Try again.', 'error');
                     return;
                 }
 
-                const img = capture();
-                faces.push({
+                // Take a picture and save the face data
+                const capturedImage = takePictureFromCamera();
+                registeredFaces.push({
                     id: Date.now(),
-                    name: name,
-                    image: img,
-                    descriptor: Array.from(detections.descriptor),
+                    name: personName,
+                    image: capturedImage,
+                    descriptor: Array.from(foundFace.descriptor),
                     time: new Date().toLocaleString()
                 });
 
-                nameInput.value = '';
-                showMessage('Registered ' + name + ' successfully!', 'success');
-                updateList();
-                saveFaces();
-            } catch (err) {
-                showMessage('Error: ' + err.message, 'error');
-                console.error(err);
+                nameInputField.value = '';
+                showUserMessage('Registered ' + personName + ' successfully!', 'success');
+                updateFaceList();
+                saveFacesToBrowser();
+            } catch (error) {
+                showUserMessage('Error: ' + error.message, 'error');
+                console.error(error);
             } finally {
-                isProcessing = false;
-                captureBtn.disabled = false;
-                captureBtn.textContent = 'Capture from Camera';
+                currentlyProcessingFace = false;
+                captureButton.disabled = false;
+                captureButton.textContent = 'Capture from Camera';
             }
         }
 
-        async function registerFaceFromFile(event) {
-            if (isProcessing) {
-                console.log('Already processing, ignoring');
+        // Register a face from an uploaded photo
+        async function registerNewFaceFromUploadedFile(uploadEvent) {
+            if (currentlyProcessingFace) {
+                console.log('Already working on processing a face');
                 return;
             }
             
-            const name = nameInput.value.trim();
-            if (!name) {
-                showMessage('Please enter a name', 'error');
-                nameInput.focus();
+            const personName = nameInputField.value.trim();
+            if (!personName) {
+                showUserMessage('Please enter a name', 'error');
+                nameInputField.focus();
                 return;
             }
 
-            const file = event.target.files[0];
-            if (!file) {
+            const selectedFile = uploadEvent.target.files[0];
+            if (!selectedFile) {
                 return;
             }
 
-            if (!modelsLoaded) {
-                showMessage('Please wait, models are still loading...', 'error');
+            if (!aiModelsReady) {
+                showUserMessage('Please wait, models are still loading...', 'error');
                 return;
             }
 
-            isProcessing = true;
-            uploadBtn.disabled = true;
-            uploadBtn.textContent = 'Processing...';
-            showMessage('Detecting face in image...', 'info');
+            currentlyProcessingFace = true;
+            uploadPhotoButton.disabled = true;
+            uploadPhotoButton.textContent = 'Processing...';
+            showUserMessage('Looking for face in image...', 'info');
 
             try {
-                const img = await loadImageFromFile(file);
+                const uploadedImage = await loadImageFromFile(selectedFile);
                 
-                const detections = await faceapi
-                    .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+                // Use AI to find a face in the uploaded photo
+                const foundFace = await faceapi
+                    .detectSingleFace(uploadedImage, new faceapi.TinyFaceDetectorOptions())
                     .withFaceLandmarks()
                     .withFaceDescriptor();
 
-                if (!detections) {
-                    showMessage('No face detected in image. Try another photo.', 'error');
+                if (!foundFace) {
+                    showUserMessage('No face detected in image. Try another photo.', 'error');
                     return;
                 }
 
-                const thumbnail = await createThumbnail(img);
+                // Create a smaller version of the image to save space
+                const smallerImage = await createSmallerImageVersion(uploadedImage);
 
-                faces.push({
+                registeredFaces.push({
                     id: Date.now(),
-                    name: name,
-                    image: thumbnail,
-                    descriptor: Array.from(detections.descriptor),
+                    name: personName,
+                    image: smallerImage,
+                    descriptor: Array.from(foundFace.descriptor),
                     time: new Date().toLocaleString()
                 });
 
-                nameInput.value = '';
-                fileInput.value = '';
-                showMessage('Registered ' + name + ' successfully!', 'success');
-                updateList();
-                saveFaces();
-            } catch (err) {
-                showMessage('Error: ' + err.message, 'error');
-                console.error(err);
+                nameInputField.value = '';
+                fileInputField.value = '';
+                showUserMessage('Registered ' + personName + ' successfully!', 'success');
+                updateFaceList();
+                saveFacesToBrowser();
+            } catch (error) {
+                showUserMessage('Error: ' + error.message, 'error');
+                console.error(error);
             } finally {
-                isProcessing = false;
-                uploadBtn.disabled = false;
-                uploadBtn.textContent = 'Upload Photo';
+                currentlyProcessingFace = false;
+                uploadPhotoButton.disabled = false;
+                uploadPhotoButton.textContent = 'Upload Photo';
             }
         }
 
-        function loadImageFromFile(file) {
+        // Load an image file into memory
+        function loadImageFromFile(imageFile) {
             return new Promise((resolve, reject) => {
-                const img = new Image();
-                img.onload = () => resolve(img);
-                img.onerror = reject;
-                img.src = URL.createObjectURL(file);
+                const imageObject = new Image();
+                imageObject.onload = () => resolve(imageObject);
+                imageObject.onerror = reject;
+                imageObject.src = URL.createObjectURL(imageFile);
             });
         }
 
-        function createThumbnail(img) {
+        // Make a smaller version of an image to save storage space
+        function createSmallerImageVersion(originalImage) {
             return new Promise((resolve) => {
                 const tempCanvas = document.createElement('canvas');
-                const maxSize = 200;
-                let width = img.width;
-                let height = img.height;
+                const maximumSize = 200;
+                let imageWidth = originalImage.width;
+                let imageHeight = originalImage.height;
 
-                if (width > height) {
-                    if (width > maxSize) {
-                        height *= maxSize / width;
-                        width = maxSize;
+                // Calculate new size while keeping proportions
+                if (imageWidth > imageHeight) {
+                    if (imageWidth > maximumSize) {
+                        imageHeight *= maximumSize / imageWidth;
+                        imageWidth = maximumSize;
                     }
                 } else {
-                    if (height > maxSize) {
-                        width *= maxSize / height;
-                        height = maxSize;
+                    if (imageHeight > maximumSize) {
+                        imageWidth *= maximumSize / imageHeight;
+                        imageHeight = maximumSize;
                     }
                 }
 
-                tempCanvas.width = width;
-                tempCanvas.height = height;
-                const ctx = tempCanvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
+                tempCanvas.width = imageWidth;
+                tempCanvas.height = imageHeight;
+                const drawingContext = tempCanvas.getContext('2d');
+                drawingContext.drawImage(originalImage, 0, 0, imageWidth, imageHeight);
                 resolve(tempCanvas.toDataURL('image/jpeg', 0.8));
             });
         }
 
-        async function startContinuousDetection() {
-            isDetecting = true;
-            detectFaces();
+        // Start continuously looking for faces in the camera
+        async function startLookingForFacesContinuously() {
+            currentlyDetectingFaces = true;
+            checkForFacesInCamera();
         }
 
-        let lastDetectionTime = 0;
-        async function detectFaces() {
-            if (!isDetecting || !stream || currentMode !== 'recognize') {
+        let lastTimeWeCheckedForFaces = 0;
+        // Keep checking the camera for faces
+        async function checkForFacesInCamera() {
+            if (!currentlyDetectingFaces || !cameraStream || currentAppMode !== 'recognize') {
                 return;
             }
 
-            const now = Date.now();
-            if (now - lastDetectionTime < 200) {
-                requestAnimationFrame(detectFaces);
+            const currentTime = Date.now();
+            // Only check every 200 milliseconds to avoid overloading the computer
+            if (currentTime - lastTimeWeCheckedForFaces < 200) {
+                requestAnimationFrame(checkForFacesInCamera);
                 return;
             }
-            lastDetectionTime = now;
+            lastTimeWeCheckedForFaces = currentTime;
 
             try {
-                const detections = await faceapi
-                    .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+                // Look for all faces in the camera view
+                const detectedFaces = await faceapi
+                    .detectAllFaces(videoElement, new faceapi.TinyFaceDetectorOptions())
                     .withFaceLandmarks()
                     .withFaceDescriptors();
 
-                const ctx = overlay.getContext('2d');
-                ctx.clearRect(0, 0, overlay.width, overlay.height);
+                const drawingContext = overlayCanvas.getContext('2d');
+                drawingContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-                if (detections.length > 0) {
-                    if (faces.length === 0) {
-                        detections.forEach(detection => {
-                            const box = detection.detection.box;
-                            ctx.strokeStyle = '#FFA500';
-                            ctx.lineWidth = 2;
-                            ctx.strokeRect(box.x, box.y, box.width, box.height);
+                if (detectedFaces.length > 0) {
+                    if (registeredFaces.length === 0) {
+                        // No faces saved yet, just draw orange boxes
+                        detectedFaces.forEach(detectedFace => {
+                            const faceBox = detectedFace.detection.box;
+                            drawingContext.strokeStyle = '#FFA500';
+                            drawingContext.lineWidth = 2;
+                            drawingContext.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
                             
-                            ctx.fillStyle = '#FFA500';
-                            ctx.fillRect(box.x, box.y - 25, box.width, 25);
+                            drawingContext.fillStyle = '#FFA500';
+                            drawingContext.fillRect(faceBox.x, faceBox.y - 25, faceBox.width, 25);
                             
-                            ctx.fillStyle = 'white';
-                            ctx.font = '14px Arial';
-                            ctx.fillText('No faces registered', box.x + 5, box.y - 8);
+                            drawingContext.fillStyle = 'white';
+                            drawingContext.font = '14px Arial';
+                            drawingContext.fillText('No faces registered', faceBox.x + 5, faceBox.y - 8);
                         });
                     } else {
-                        const faceMatcher = new faceapi.FaceMatcher(
-                            faces.map(f => new faceapi.LabeledFaceDescriptors(
-                                f.name,
-                                [new Float32Array(f.descriptor)]
+                        // Compare detected faces with registered faces
+                        const faceComparison = new faceapi.FaceMatcher(
+                            registeredFaces.map(savedFace => new faceapi.LabeledFaceDescriptors(
+                                savedFace.name,
+                                [new Float32Array(savedFace.descriptor)]
                             )),
                             0.6
                         );
 
-                        detections.forEach(detection => {
-                            const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
-                            const box = detection.detection.box;
+                        detectedFaces.forEach(detectedFace => {
+                            const closestMatch = faceComparison.findBestMatch(detectedFace.descriptor);
+                            const faceBox = detectedFace.detection.box;
                             
-                            ctx.strokeStyle = bestMatch.label !== 'unknown' ? '#4CAF50' : '#f44336';
-                            ctx.lineWidth = 3;
-                            ctx.strokeRect(box.x, box.y, box.width, box.height);
+                            // Green box for recognized faces, red for unknown
+                            drawingContext.strokeStyle = closestMatch.label !== 'unknown' ? '#4CAF50' : '#f44336';
+                            drawingContext.lineWidth = 3;
+                            drawingContext.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
                             
-                            ctx.fillStyle = bestMatch.label !== 'unknown' ? '#4CAF50' : '#f44336';
-                            ctx.fillRect(box.x, box.y - 30, box.width, 30);
+                            drawingContext.fillStyle = closestMatch.label !== 'unknown' ? '#4CAF50' : '#f44336';
+                            drawingContext.fillRect(faceBox.x, faceBox.y - 30, faceBox.width, 30);
                             
-                            ctx.fillStyle = 'white';
-                            ctx.font = 'bold 16px Arial';
-                            const label = bestMatch.label !== 'unknown' 
-                                ? bestMatch.label + ' (' + Math.round((1 - bestMatch.distance) * 100) + '%)'
+                            drawingContext.fillStyle = 'white';
+                            drawingContext.font = 'bold 16px Arial';
+                            const labelText = closestMatch.label !== 'unknown' 
+                                ? closestMatch.label + ' (' + Math.round((1 - closestMatch.distance) * 100) + '%)'
                                 : 'Unknown';
-                            ctx.fillText(label, box.x + 5, box.y - 10);
+                            drawingContext.fillText(labelText, faceBox.x + 5, faceBox.y - 10);
                         });
                     }
                 }
-            } catch (err) {
-                console.error('Detection error:', err);
+            } catch (error) {
+                console.error('Error while detecting faces:', error);
             }
 
-            requestAnimationFrame(detectFaces);
+            // Keep checking for faces
+            requestAnimationFrame(checkForFacesInCamera);
         }
 
-        function updateList() {
-            count.textContent = faces.length;
-            if (faces.length === 0) {
-                faceList.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">No faces registered yet</p>';
+        // Update the list of registered faces on the screen
+        function updateFaceList() {
+            faceCountBadge.textContent = registeredFaces.length;
+            if (registeredFaces.length === 0) {
+                faceListContainer.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">No faces registered yet</p>';
                 return;
             }
-            faceList.innerHTML = faces.map(f => `
+            faceListContainer.innerHTML = registeredFaces.map(savedFace => `
                 <div class="face-item">
-                    <img src="${f.image}" alt="${f.name}">
+                    <img src="${savedFace.image}" alt="${savedFace.name}">
                     <div class="face-info">
-                        <div class="face-name">${f.name}</div>
-                        <div class="face-time">${f.time}</div>
+                        <div class="face-name">${savedFace.name}</div>
+                        <div class="face-time">${savedFace.time}</div>
                     </div>
-                    <button class="btn btn-danger" onclick="deleteFace(${f.id})" style="width:auto;padding:8px 12px;">Delete</button>
+                    <button class="btn btn-danger" onclick="deleteOneFace(${savedFace.id})" style="width:auto;padding:8px 12px;">Delete</button>
                 </div>
             `).join('');
         }
 
-        function deleteFace(id) {
-            faces = faces.filter(f => f.id !== id);
-            showMessage('Face deleted', 'info');
-            updateList();
-            saveFaces();
+        // Delete a single face from the list
+        function deleteOneFace(faceId) {
+            registeredFaces = registeredFaces.filter(savedFace => savedFace.id !== faceId);
+            showUserMessage('Face deleted', 'info');
+            updateFaceList();
+            saveFacesToBrowser();
         }
 
-        function clearAllFaces() {
-            if (faces.length === 0) return;
+        // Delete all registered faces
+        function deleteAllRegisteredFaces() {
+            if (registeredFaces.length === 0) return;
             
-            if (confirm('Are you sure you want to delete all ' + faces.length + ' registered faces?')) {
-                faces = [];
-                updateList();
-                saveFaces();
-                showMessage('All faces cleared', 'info');
+            if (confirm('Are you sure you want to delete all ' + registeredFaces.length + ' registered faces?')) {
+                registeredFaces = [];
+                updateFaceList();
+                saveFacesToBrowser();
+                showUserMessage('All faces cleared', 'info');
             }
         }
 
-        function showMessage(text, type = 'info') {
-            message.textContent = text;
-            message.className = 'message show';
-            message.style.background = type === 'success' ? '#dff0d8' : 
-                                      type === 'error' ? '#f2dede' : '#d9edf7';
-            message.style.color = type === 'success' ? '#3c763d' : 
-                                 type === 'error' ? '#a94442' : '#31708f';
+        // Show a message to the user
+        function showUserMessage(messageText, messageType = 'info') {
+            messageBox.textContent = messageText;
+            messageBox.className = 'message show';
+            messageBox.style.background = messageType === 'success' ? '#dff0d8' : 
+                                      messageType === 'error' ? '#f2dede' : '#d9edf7';
+            messageBox.style.color = messageType === 'success' ? '#3c763d' : 
+                                 messageType === 'error' ? '#a94442' : '#31708f';
         }
 
-        // Initialize
-        loadModels();
-        loadSavedFaces();
-        updateList();
+        // Start everything when the page loads
+        downloadAIModels();
+        loadPreviouslySavedFaces();
+        updateFaceList();
 
-        // Event listeners
-        cameraBtn.onclick = () => toggleCamera('register');
-        cameraBtn2.onclick = () => toggleCamera('recognize');
-        captureBtn.onclick = registerFaceFromCamera;
-        uploadBtn.onclick = () => fileInput.click();
-        fileInput.onchange = registerFaceFromFile;
-        registerBtn.onclick = () => switchMode('register');
-        recognizeBtn.onclick = () => switchMode('recognize');
-        clearAllBtn.onclick = clearAllFaces;
+        // Connect all the buttons to their functions
+        registerCameraButton.addEventListener('click', function() {
+            console.log('Register camera button was clicked');
+            toggleCameraOnOff('register');
+        });
+        
+        recognizeCameraButton.addEventListener('click', function() {
+            console.log('Recognize camera button was clicked');
+            toggleCameraOnOff('recognize');
+        });
+        
+        captureButton.addEventListener('click', function() {
+            console.log('Capture button was clicked');
+            registerNewFaceFromCamera();
+        });
+        
+        uploadPhotoButton.addEventListener('click', function() {
+            console.log('Upload photo button was clicked');
+            fileInputField.click();
+        });
+        
+        fileInputField.addEventListener('change', registerNewFaceFromUploadedFile);
+        
+        registerModeButton.addEventListener('click', function() {
+            console.log('Switching to register mode');
+            changeAppMode('register');
+        });
+        
+        recognizeModeButton.addEventListener('click', function() {
+            console.log('Switching to recognize mode');
+            changeAppMode('recognize');
+        });
+        
+        clearAllButton.addEventListener('click', deleteAllRegisteredFaces);
     </script>
 </body>
 </html>
