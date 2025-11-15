@@ -339,6 +339,7 @@
                 <button class="btn btn-warning" onclick="toggleVoice()" id="voiceBtn">Voice: OFF</button>
             </div>
             <div style="display:flex;gap:10px;justify-content:center;margin-top:15px;flex-wrap:wrap;">
+                <a href="index.html" class="btn btn-primary" style="text-decoration:none;">Ultimate Version</a>
                 <a href="regular.html" class="btn" style="text-decoration:none;">Regular Version</a>
                 <a href="deepfake.html" class="btn" style="text-decoration:none;">Deepfake Detection</a>
             </div>
@@ -379,6 +380,12 @@
                         <button class="btn btn-info" id="batchRegisterBtn">Batch Register (Multiple)</button>
                         <input type="file" id="fileInput" accept="image/*" style="display:none;">
                         <input type="file" id="batchFileInput" accept="image/*" multiple style="display:none;">
+                        
+                        <div style="border-top:1px solid var(--border-color);padding-top:10px;margin-top:5px;">
+                            <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">Import photos (PNG/HEIF) or database (JSON)</p>
+                            <button class="btn btn-info" id="importPhotosBtn" style="width:100%;">Import Photos (PNG/HEIF)</button>
+                            <input type="file" id="photoImportInput" accept="image/*" multiple style="display:none;">
+                        </div>
                     </div>
                     <div class="message" id="msgReg"></div>
                 </div>
@@ -392,8 +399,8 @@
                         <input type="search" id="searchInput" placeholder="Search faces...">
                     </div>
                     <div style="display:flex;gap:8px;margin-bottom:15px;">
-                        <button class="btn btn-info" onclick="exportData()" style="flex:1;">Export</button>
-                        <button class="btn btn-warning" onclick="importData()" style="flex:1;">Import</button>
+                        <button class="btn btn-info" onclick="exportData()" style="flex:1;">Export DB</button>
+                        <button class="btn btn-warning" onclick="importData()" style="flex:1;">Import DB</button>
                         <button class="btn btn-danger" onclick="clearAll()" style="flex:1;">Clear All</button>
                     </div>
                     <input type="file" id="importInput" accept=".json" style="display:none;">
@@ -537,6 +544,12 @@
                     <input type="range" id="speedSlider" class="slider" min="100" max="1000" value="200" step="100">
                 </div>
 
+                <div class="slider-container">
+                    <label><strong>Attendance Logging Cooldown:</strong> <span id="cooldownValue">5 minutes</span></label>
+                    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">Time between attendance logs for same person</p>
+                    <input type="range" id="cooldownSlider" class="slider" min="60000" max="600000" value="300000" step="60000">
+                </div>
+
                 <div style="border-top:1px solid var(--border-color);padding-top:20px;margin-top:20px;">
                     <h4 style="margin-bottom:15px;">Alert Settings</h4>
                     <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
@@ -575,6 +588,8 @@
         let compareImage2 = null;
         let alertSpecificPerson = '';
         let lastRecognized = {};
+        let lastLogged = {}; // Track when each person was last logged
+        let activeFaces = {}; // Track currently visible faces
 
         // Initialize
         async function init() {
@@ -625,7 +640,11 @@
         // Load stored data
         function loadStoredData() {
             try {
-                registeredFaces = JSON.parse(localStorage.getItem('faces') || '[]');
+                // Try the shared key first, then fall back to old key for migration
+                let faces = localStorage.getItem('registeredFaces');
+                if (!faces) faces = localStorage.getItem('faces');
+                
+                registeredFaces = JSON.parse(faces || '[]');
                 recognitionHistory = JSON.parse(localStorage.getItem('history') || '[]');
                 attendanceLog = JSON.parse(localStorage.getItem('attendance') || '[]');
                 snapshots = JSON.parse(localStorage.getItem('snapshots') || '[]');
@@ -637,7 +656,8 @@
         // Save data
         function saveData() {
             try {
-                localStorage.setItem('faces', JSON.stringify(registeredFaces));
+                // Use shared key for cross-version compatibility
+                localStorage.setItem('registeredFaces', JSON.stringify(registeredFaces));
                 localStorage.setItem('history', JSON.stringify(recognitionHistory));
                 localStorage.setItem('attendance', JSON.stringify(attendanceLog));
                 localStorage.setItem('snapshots', JSON.stringify(snapshots));
@@ -877,6 +897,8 @@
 
         // Detect faces continuously
         let lastDetection = 0;
+        let attendanceCooldown = 300000; // 5 minutes default
+        
         async function detectFaces(video, canvas) {
             if (!isDetecting || !cameraStream) return;
 
@@ -898,6 +920,9 @@
 
                 document.getElementById('liveCountRec').textContent = `Faces: ${detections.length}`;
 
+                // Track which faces are currently visible
+                const currentlyVisible = new Set();
+
                 if (detections.length > 0 && registeredFaces.length > 0) {
                     const matcher = new faceapi.FaceMatcher(
                         registeredFaces.map(f => new faceapi.LabeledFaceDescriptors(
@@ -911,6 +936,23 @@
                         const match = matcher.findBestMatch(detection.descriptor);
                         const box = detection.detection.box;
                         const isUnknown = match.label === 'unknown';
+                        
+                        if (!isUnknown) {
+                            currentlyVisible.add(match.label);
+                            
+                            // Initialize tracking for this face if not already tracked
+                            if (!activeFaces[match.label]) {
+                                activeFaces[match.label] = {
+                                    firstSeen: now,
+                                    lastSeen: now,
+                                    detectionCount: 0
+                                };
+                            }
+                            
+                            // Update last seen time
+                            activeFaces[match.label].lastSeen = now;
+                            activeFaces[match.label].detectionCount++;
+                        }
                         
                         // Blur if enabled
                         if (isUnknown && document.getElementById('blurUnknown').checked) {
@@ -928,37 +970,47 @@
                         
                         ctx.fillStyle = 'white';
                         ctx.font = 'bold 16px Arial';
-                        const label = isUnknown ? 'Unknown' : `${match.label} (${Math.round((1 - match.distance) * 100)}%)`;
+                        const confidence = Math.round((1 - match.distance) * 100);
+                        const label = isUnknown ? 'Unknown' : `${match.label} (${confidence}%)`;
                         ctx.fillText(label, box.x + 5, box.y - 10);
                         
-                        // Log recognition
-                        const confidence = Math.round((1 - match.distance) * 100);
-                        logRecognition(match.label, confidence, isUnknown);
-                        
-                        // Voice announcement
-                        if (!isUnknown && !lastRecognized[match.label]) {
-                            speak(`Hello ${match.label}`);
-                            lastRecognized[match.label] = Date.now();
-                        }
-                        
-                        // Reset last recognized after 5 seconds
-                        setTimeout(() => delete lastRecognized[match.label], 5000);
-                        
-                        // Alert for unknown faces
-                        if (isUnknown && document.getElementById('alertUnknown').checked) {
-                            if (!lastRecognized['unknown']) {
-                                alert('Unknown face detected!');
-                                lastRecognized['unknown'] = Date.now();
-                                setTimeout(() => delete lastRecognized['unknown'], 10000);
+                        // Log recognition with cooldown
+                        if (!isUnknown) {
+                            const shouldLog = !lastLogged[match.label] || (now - lastLogged[match.label] > attendanceCooldown);
+                            
+                            if (shouldLog) {
+                                logRecognition(match.label, confidence, isUnknown);
+                                lastLogged[match.label] = now;
                             }
                         }
                         
-                        // Alert for specific person
+                        // Voice announcement (once per session)
+                        if (!isUnknown && !lastRecognized[match.label]) {
+                            speak(`Hello ${match.label}`);
+                            lastRecognized[match.label] = now;
+                        }
+                        
+                        // Keep voice recognition active for 30 seconds after last detection
+                        if (!isUnknown && activeFaces[match.label]) {
+                            clearTimeout(activeFaces[match.label].voiceTimeout);
+                            activeFaces[match.label].voiceTimeout = setTimeout(() => {
+                                delete lastRecognized[match.label];
+                            }, 30000);
+                        }
+                        
+                        // Alert for unknown faces (with cooldown)
+                        if (isUnknown && document.getElementById('alertUnknown').checked) {
+                            if (!lastRecognized['unknown'] || (now - lastRecognized['unknown'] > 10000)) {
+                                alert('Unknown face detected!');
+                                lastRecognized['unknown'] = now;
+                            }
+                        }
+                        
+                        // Alert for specific person (with cooldown)
                         if (alertSpecificPerson && match.label === alertSpecificPerson) {
-                            if (!lastRecognized['alert_' + match.label]) {
+                            if (!lastRecognized['alert_' + match.label] || (now - lastRecognized['alert_' + match.label] > 10000)) {
                                 alert(`${match.label} detected!`);
-                                lastRecognized['alert_' + match.label] = Date.now();
-                                setTimeout(() => delete lastRecognized['alert_' + match.label], 10000);
+                                lastRecognized['alert_' + match.label] = now;
                             }
                         }
                     });
@@ -977,6 +1029,14 @@
                         ctx.fillText('No faces registered', box.x + 5, box.y - 8);
                     });
                 }
+
+                // Clean up faces that haven't been seen in 3 seconds
+                Object.keys(activeFaces).forEach(name => {
+                    if (!currentlyVisible.has(name) && (now - activeFaces[name].lastSeen > 3000)) {
+                        delete activeFaces[name];
+                    }
+                });
+
             } catch (error) {
                 console.error('Detection error:', error);
             }
@@ -989,6 +1049,7 @@
             const timestamp = new Date().toLocaleString();
             const date = new Date().toLocaleDateString();
             
+            // Add to history (for tracking all detections)
             recognitionHistory.push({
                 name: isUnknown ? 'Unknown Person' : name,
                 confidence: confidence,
@@ -996,6 +1057,7 @@
                 isUnknown: isUnknown
             });
             
+            // Add to attendance only if not unknown and this is a new visit
             if (!isUnknown) {
                 attendanceLog.push({
                     name: name,
@@ -1103,6 +1165,46 @@
             } catch (error) {
                 showMessage('msgReg', 'Error: ' + error.message, 'error');
             }
+        }
+
+        // Import photos (PNG/HEIF)
+        async function importPhotos(event) {
+            const files = event.target.files;
+            if (files.length === 0) return;
+            
+            showMessage('msgReg', `Processing ${files.length} photos...`, 'info');
+            
+            let successCount = 0;
+            for (let i = 0; i < files.length; i++) {
+                try {
+                    const img = await loadImage(files[i]);
+                    const detection = await faceapi
+                        .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+                        .withFaceLandmarks()
+                        .withFaceDescriptor();
+                    
+                    if (detection) {
+                        const fileName = files[i].name.replace(/\.[^/.]+$/, "");
+                        const smallImg = await resizeImage(img, 200);
+                        
+                        registeredFaces.push({
+                            id: Date.now() + i,
+                            name: fileName,
+                            image: smallImg,
+                            descriptor: Array.from(detection.descriptor),
+                            time: new Date().toLocaleString()
+                        });
+                        successCount++;
+                    }
+                } catch (error) {
+                    console.error(`Error processing ${files[i].name}:`, error);
+                }
+            }
+            
+            event.target.value = '';
+            showMessage('msgReg', `Imported ${successCount} of ${files.length} photos`, 'success');
+            saveData();
+            updateUI();
         }
 
         // Batch register
@@ -1424,6 +1526,8 @@
             document.getElementById('fileInput').addEventListener('change', uploadPhoto);
             document.getElementById('batchRegisterBtn').addEventListener('click', () => document.getElementById('batchFileInput').click());
             document.getElementById('batchFileInput').addEventListener('change', batchRegister);
+            document.getElementById('importPhotosBtn').addEventListener('click', () => document.getElementById('photoImportInput').click());
+            document.getElementById('photoImportInput').addEventListener('change', importPhotos);
             document.getElementById('searchInput').addEventListener('input', updateFaceList);
             document.getElementById('importInput').addEventListener('change', handleImport);
             
