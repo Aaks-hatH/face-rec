@@ -306,6 +306,9 @@
         async function toggleCamera(mode) {
             const btn = mode === 'register' ? cameraBtn : cameraBtn2;
             
+            console.log('toggleCamera called with mode:', mode);
+            console.log('Current stream:', stream);
+            
             if (stream) {
                 stream.getTracks().forEach(t => t.stop());
                 stream = null;
@@ -327,6 +330,7 @@
 
             btn.disabled = true;
             showMessage('Starting camera...', 'info');
+            console.log('Requesting camera access...');
             
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ 
@@ -335,10 +339,12 @@
                         height: { ideal: 480 }
                     } 
                 });
+                console.log('Camera stream obtained:', stream);
                 video.srcObject = stream;
                 
                 await new Promise(resolve => {
                     video.onloadedmetadata = () => {
+                        console.log('Video metadata loaded');
                         overlay.width = video.videoWidth;
                         overlay.height = video.videoHeight;
                         resolve();
@@ -349,6 +355,8 @@
                 btn.className = 'btn btn-danger';
                 btn.disabled = false;
                 showMessage('Camera active', 'success');
+                console.log('Camera started successfully');
+                
                 setTimeout(() => {
                     if (mode === 'register') {
                         message.style.display = 'none';
@@ -356,11 +364,15 @@
                 }, 1500);
                 
                 if (mode === 'recognize') {
+                    console.log('Starting continuous detection...');
                     startContinuousDetection();
                 }
             } catch (err) {
+                console.error('Camera error:', err);
                 showMessage('Camera error: ' + err.message, 'error');
                 btn.disabled = false;
+                btn.textContent = 'Start Camera';
+                btn.className = 'btn btn-primary';
             }
         }
 
