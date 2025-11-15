@@ -1,0 +1,779 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .modes {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            background: white;
+            color: #333;
+            transition: all 0.2s;
+        }
+        .btn:hover:not(:disabled) {
+            background: #f0f0f0;
+            transform: scale(1.02);
+        }
+        .btn:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-active {
+            background: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+        .btn-primary {
+            background: #2196F3;
+            color: white;
+            border-color: #2196F3;
+        }
+        .btn-danger {
+            background: #f44336;
+            color: white;
+            border-color: #f44336;
+        }
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 20px;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border: 1px solid #ccc;
+            margin-bottom: 20px;
+            min-height: 300px;
+        }
+        video, canvas {
+            width: 100%;
+            display: block;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        input {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+        .message {
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 12px;
+            text-align: center;
+            display: none;
+            border: 1px solid #ccc;
+        }
+        .message.show {
+            display: block;
+        }
+        .face-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .face-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        .face-item img {
+            width: 60px;
+            height: 60px;
+            border: 1px solid #ddd;
+            object-fit: cover;
+        }
+        .face-info {
+            flex: 1;
+        }
+        .face-name {
+            font-weight: bold;
+            color: #333;
+        }
+        .face-time {
+            font-size: 12px;
+            color: #666;
+        }
+        .count-badge {
+            background: #4CAF50;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Face Recognition System</h1>
+            <p>Made By Aakshat Hariharan</p>
+        </div>
+
+        <div class="modes">
+            <button class="btn btn-active" id="registerBtn">Register Mode</button>
+            <button class="btn" id="recognizeBtn">Recognize Mode</button>
+        </div>
+
+        <div class="main-content">
+            <div class="card">
+                <div class="video-container">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="overlay"></canvas>
+                </div>
+                <canvas id="canvas" style="display:none;"></canvas>
+
+                <div id="registerMode">
+                    <div class="controls">
+                        <button class="btn btn-primary" id="cameraBtn">Start Camera</button>
+                        <input type="text" id="nameInput" placeholder="Enter name...">
+                        <div style="display:flex;gap:10px;">
+                            <button class="btn" id="captureBtn" style="flex:1;">Capture from Camera</button>
+                            <button class="btn" id="uploadBtn" style="flex:1;">Upload Photo</button>
+                        </div>
+                        <input type="file" id="fileInput" accept="image/*" style="display:none;">
+                    </div>
+                </div>
+
+                <div id="recognizeMode" style="display:none;">
+                    <div class="controls">
+                        <button class="btn btn-primary" id="cameraBtn2">Start Camera</button>
+                        <p style="color:#666;font-size:14px;margin-top:10px;">Camera will automatically detect and recognize faces</p>
+                    </div>
+                </div>
+
+                <div class="message" id="message"></div>
+            </div>
+
+            <div class="card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <h2 style="color:#333;font-size:1.3em;">Registered Faces</h2>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <span class="count-badge" id="count">0</span>
+                        <button class="btn btn-danger" id="clearAllBtn" style="padding:4px 12px;font-size:12px;">Clear All</button>
+                    </div>
+                </div>
+                <div class="face-list" id="faceList">
+                    <p style="text-align:center;color:#666;padding:20px;">No faces registered yet</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+    <script>
+        // These keep track of what is happening in the app
+        let cameraStream = null;
+        let registeredFaces = [];
+        let aiModelsReady = false;
+        let currentlyDetectingFaces = false;
+        let currentlyProcessingFace = false;
+        let currentAppMode = 'register';
+
+        // Get all the buttons and elements from the page
+        const videoElement = document.getElementById('video');
+        const overlayCanvas = document.getElementById('overlay');
+        const hiddenCanvas = document.getElementById('canvas');
+        const registerCameraButton = document.getElementById('cameraBtn');
+        const recognizeCameraButton = document.getElementById('cameraBtn2');
+        const nameInputField = document.getElementById('nameInput');
+        const captureButton = document.getElementById('captureBtn');
+        const fileInputField = document.getElementById('fileInput');
+        const uploadPhotoButton = document.getElementById('uploadBtn');
+        const registerModeButton = document.getElementById('registerBtn');
+        const recognizeModeButton = document.getElementById('recognizeBtn');
+        const messageBox = document.getElementById('message');
+        const faceListContainer = document.getElementById('faceList');
+        const faceCountBadge = document.getElementById('count');
+        const registerModeSection = document.getElementById('registerMode');
+        const recognizeModeSection = document.getElementById('recognizeMode');
+        const clearAllButton = document.getElementById('clearAllBtn');
+
+        // Try to load any faces that were saved before
+        function loadPreviouslySavedFaces() {
+            try {
+                const savedFacesData = localStorage.getItem('registeredFaces');
+                if (savedFacesData) {
+                    registeredFaces = JSON.parse(savedFacesData);
+                    updateFaceList();
+                    console.log('Successfully loaded ' + registeredFaces.length + ' faces from previous session');
+                }
+            } catch (error) {
+                console.error('Could not load saved faces:', error);
+            }
+        }
+
+        // Save all the registered faces so they don't disappear when closing the browser
+        function saveFacesToBrowser() {
+            try {
+                localStorage.setItem('registeredFaces', JSON.stringify(registeredFaces));
+                console.log('Successfully saved ' + registeredFaces.length + ' faces');
+            } catch (error) {
+                console.error('Could not save faces:', error);
+                showUserMessage('Warning: Could not save to storage', 'error');
+            }
+        }
+
+        // Download the AI models needed for face recognition
+        async function downloadAIModels() {
+            if (aiModelsReady) return;
+            
+            showUserMessage('Loading AI models...', 'info');
+            const modelStorageURL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+            
+            try {
+                // Download all three models at the same time
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri(modelStorageURL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(modelStorageURL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(modelStorageURL)
+                ]);
+                aiModelsReady = true;
+                showUserMessage('Ready to use!', 'success');
+                setTimeout(() => {
+                    messageBox.style.display = 'none';
+                }, 2000);
+            } catch (error) {
+                showUserMessage('Failed to load models. Check internet connection.', 'error');
+                console.error(error);
+            }
+        }
+
+        // Turn the camera on or off
+        async function toggleCameraOnOff(modeType) {
+            const buttonToUse = modeType === 'register' ? registerCameraButton : recognizeCameraButton;
+            
+            console.log('Camera button clicked in mode:', modeType);
+            console.log('Current camera status:', cameraStream);
+            
+            // If camera is already on, turn it off
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+                videoElement.srcObject = null;
+                buttonToUse.textContent = 'Start Camera';
+                buttonToUse.className = 'btn btn-primary';
+                currentlyDetectingFaces = false;
+                showUserMessage('Camera stopped', 'info');
+                
+                // Clear any drawn boxes on the screen
+                const drawingContext = overlayCanvas.getContext('2d');
+                drawingContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                return;
+            }
+
+            // Make sure AI models are ready before turning on camera
+            if (!aiModelsReady) {
+                showUserMessage('Please wait, models are still loading...', 'error');
+                return;
+            }
+
+            buttonToUse.disabled = true;
+            showUserMessage('Starting camera...', 'info');
+            console.log('Asking browser for camera permission...');
+            
+            try {
+                // Ask the browser to access the webcam
+                cameraStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    } 
+                });
+                console.log('Camera access granted:', cameraStream);
+                videoElement.srcObject = cameraStream;
+                
+                // Wait for the video to be ready
+                await new Promise(resolve => {
+                    videoElement.onloadedmetadata = () => {
+                        console.log('Video is ready to use');
+                        overlayCanvas.width = videoElement.videoWidth;
+                        overlayCanvas.height = videoElement.videoHeight;
+                        resolve();
+                    };
+                });
+                
+                buttonToUse.textContent = 'Stop Camera';
+                buttonToUse.className = 'btn btn-danger';
+                buttonToUse.disabled = false;
+                showUserMessage('Camera active', 'success');
+                console.log('Camera started successfully');
+                
+                // Hide success message after a bit in register mode
+                setTimeout(() => {
+                    if (modeType === 'register') {
+                        messageBox.style.display = 'none';
+                    }
+                }, 1500);
+                
+                // If in recognize mode, start looking for faces automatically
+                if (modeType === 'recognize') {
+                    console.log('Starting automatic face detection...');
+                    startLookingForFacesContinuously();
+                }
+            } catch (error) {
+                console.error('Camera error:', error);
+                showUserMessage('Camera error: ' + error.message, 'error');
+                buttonToUse.disabled = false;
+                buttonToUse.textContent = 'Start Camera';
+                buttonToUse.className = 'btn btn-primary';
+            }
+        }
+
+        // Switch between register mode and recognize mode
+        function changeAppMode(newMode) {
+            currentAppMode = newMode;
+            
+            // Turn off camera if it's running
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+                videoElement.srcObject = null;
+                currentlyDetectingFaces = false;
+            }
+            
+            // Reset both camera buttons
+            registerCameraButton.textContent = 'Start Camera';
+            registerCameraButton.className = 'btn btn-primary';
+            recognizeCameraButton.textContent = 'Start Camera';
+            recognizeCameraButton.className = 'btn btn-primary';
+            
+            // Clear any drawn boxes
+            const drawingContext = overlayCanvas.getContext('2d');
+            drawingContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            
+            // Show the correct section based on mode
+            if (newMode === 'register') {
+                registerModeButton.className = 'btn btn-active';
+                recognizeModeButton.className = 'btn';
+                registerModeSection.style.display = 'block';
+                recognizeModeSection.style.display = 'none';
+            } else {
+                registerModeButton.className = 'btn';
+                recognizeModeButton.className = 'btn btn-active';
+                registerModeSection.style.display = 'none';
+                recognizeModeSection.style.display = 'block';
+            }
+        }
+
+        // Take a picture from the camera
+        function takePictureFromCamera() {
+            hiddenCanvas.width = videoElement.videoWidth;
+            hiddenCanvas.height = videoElement.videoHeight;
+            hiddenCanvas.getContext('2d').drawImage(videoElement, 0, 0);
+            return hiddenCanvas.toDataURL('image/jpeg', 0.8);
+        }
+
+        // Register a face using the camera
+        async function registerNewFaceFromCamera() {
+            if (currentlyProcessingFace) {
+                console.log('Already working on a face, please wait');
+                return;
+            }
+            
+            const personName = nameInputField.value.trim();
+            if (!personName) {
+                showUserMessage('Please enter a name', 'error');
+                nameInputField.focus();
+                return;
+            }
+            if (!cameraStream) {
+                showUserMessage('Please start camera first', 'error');
+                return;
+            }
+
+            currentlyProcessingFace = true;
+            captureButton.disabled = true;
+            captureButton.textContent = 'Detecting...';
+            showUserMessage('Looking for a face...', 'info');
+
+            try {
+                // Use AI to find a face in the camera view
+                const foundFace = await faceapi
+                    .detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+
+                if (!foundFace) {
+                    showUserMessage('No face detected. Try again.', 'error');
+                    return;
+                }
+
+                // Take a picture and save the face data
+                const capturedImage = takePictureFromCamera();
+                registeredFaces.push({
+                    id: Date.now(),
+                    name: personName,
+                    image: capturedImage,
+                    descriptor: Array.from(foundFace.descriptor),
+                    time: new Date().toLocaleString()
+                });
+
+                nameInputField.value = '';
+                showUserMessage('Registered ' + personName + ' successfully!', 'success');
+                updateFaceList();
+                saveFacesToBrowser();
+            } catch (error) {
+                showUserMessage('Error: ' + error.message, 'error');
+                console.error(error);
+            } finally {
+                currentlyProcessingFace = false;
+                captureButton.disabled = false;
+                captureButton.textContent = 'Capture from Camera';
+            }
+        }
+
+        // Register a face from an uploaded photo
+        async function registerNewFaceFromUploadedFile(uploadEvent) {
+            if (currentlyProcessingFace) {
+                console.log('Already working on processing a face');
+                return;
+            }
+            
+            const personName = nameInputField.value.trim();
+            if (!personName) {
+                showUserMessage('Please enter a name', 'error');
+                nameInputField.focus();
+                return;
+            }
+
+            const selectedFile = uploadEvent.target.files[0];
+            if (!selectedFile) {
+                return;
+            }
+
+            if (!aiModelsReady) {
+                showUserMessage('Please wait, models are still loading...', 'error');
+                return;
+            }
+
+            currentlyProcessingFace = true;
+            uploadPhotoButton.disabled = true;
+            uploadPhotoButton.textContent = 'Processing...';
+            showUserMessage('Looking for face in image...', 'info');
+
+            try {
+                const uploadedImage = await loadImageFromFile(selectedFile);
+                
+                // Use AI to find a face in the uploaded photo
+                const foundFace = await faceapi
+                    .detectSingleFace(uploadedImage, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+
+                if (!foundFace) {
+                    showUserMessage('No face detected in image. Try another photo.', 'error');
+                    return;
+                }
+
+                // Create a smaller version of the image to save space
+                const smallerImage = await createSmallerImageVersion(uploadedImage);
+
+                registeredFaces.push({
+                    id: Date.now(),
+                    name: personName,
+                    image: smallerImage,
+                    descriptor: Array.from(foundFace.descriptor),
+                    time: new Date().toLocaleString()
+                });
+
+                nameInputField.value = '';
+                fileInputField.value = '';
+                showUserMessage('Registered ' + personName + ' successfully!', 'success');
+                updateFaceList();
+                saveFacesToBrowser();
+            } catch (error) {
+                showUserMessage('Error: ' + error.message, 'error');
+                console.error(error);
+            } finally {
+                currentlyProcessingFace = false;
+                uploadPhotoButton.disabled = false;
+                uploadPhotoButton.textContent = 'Upload Photo';
+            }
+        }
+
+        // Load an image file into memory
+        function loadImageFromFile(imageFile) {
+            return new Promise((resolve, reject) => {
+                const imageObject = new Image();
+                imageObject.onload = () => resolve(imageObject);
+                imageObject.onerror = reject;
+                imageObject.src = URL.createObjectURL(imageFile);
+            });
+        }
+
+        // Make a smaller version of an image to save storage space
+        function createSmallerImageVersion(originalImage) {
+            return new Promise((resolve) => {
+                const tempCanvas = document.createElement('canvas');
+                const maximumSize = 200;
+                let imageWidth = originalImage.width;
+                let imageHeight = originalImage.height;
+
+                // Calculate new size while keeping proportions
+                if (imageWidth > imageHeight) {
+                    if (imageWidth > maximumSize) {
+                        imageHeight *= maximumSize / imageWidth;
+                        imageWidth = maximumSize;
+                    }
+                } else {
+                    if (imageHeight > maximumSize) {
+                        imageWidth *= maximumSize / imageHeight;
+                        imageHeight = maximumSize;
+                    }
+                }
+
+                tempCanvas.width = imageWidth;
+                tempCanvas.height = imageHeight;
+                const drawingContext = tempCanvas.getContext('2d');
+                drawingContext.drawImage(originalImage, 0, 0, imageWidth, imageHeight);
+                resolve(tempCanvas.toDataURL('image/jpeg', 0.8));
+            });
+        }
+
+        // Start continuously looking for faces in the camera
+        async function startLookingForFacesContinuously() {
+            currentlyDetectingFaces = true;
+            checkForFacesInCamera();
+        }
+
+        let lastTimeWeCheckedForFaces = 0;
+        // Keep checking the camera for faces
+        async function checkForFacesInCamera() {
+            if (!currentlyDetectingFaces || !cameraStream || currentAppMode !== 'recognize') {
+                return;
+            }
+
+            const currentTime = Date.now();
+            // Only check every 200 milliseconds to avoid overloading the computer
+            if (currentTime - lastTimeWeCheckedForFaces < 200) {
+                requestAnimationFrame(checkForFacesInCamera);
+                return;
+            }
+            lastTimeWeCheckedForFaces = currentTime;
+
+            try {
+                // Look for all faces in the camera view
+                const detectedFaces = await faceapi
+                    .detectAllFaces(videoElement, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptors();
+
+                const drawingContext = overlayCanvas.getContext('2d');
+                drawingContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+                if (detectedFaces.length > 0) {
+                    if (registeredFaces.length === 0) {
+                        // No faces saved yet, just draw orange boxes
+                        detectedFaces.forEach(detectedFace => {
+                            const faceBox = detectedFace.detection.box;
+                            drawingContext.strokeStyle = '#FFA500';
+                            drawingContext.lineWidth = 2;
+                            drawingContext.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
+                            
+                            drawingContext.fillStyle = '#FFA500';
+                            drawingContext.fillRect(faceBox.x, faceBox.y - 25, faceBox.width, 25);
+                            
+                            drawingContext.fillStyle = 'white';
+                            drawingContext.font = '14px Arial';
+                            drawingContext.fillText('No faces registered', faceBox.x + 5, faceBox.y - 8);
+                        });
+                    } else {
+                        // Compare detected faces with registered faces
+                        const faceComparison = new faceapi.FaceMatcher(
+                            registeredFaces.map(savedFace => new faceapi.LabeledFaceDescriptors(
+                                savedFace.name,
+                                [new Float32Array(savedFace.descriptor)]
+                            )),
+                            0.6
+                        );
+
+                        detectedFaces.forEach(detectedFace => {
+                            const closestMatch = faceComparison.findBestMatch(detectedFace.descriptor);
+                            const faceBox = detectedFace.detection.box;
+                            
+                            // Green box for recognized faces, red for unknown
+                            drawingContext.strokeStyle = closestMatch.label !== 'unknown' ? '#4CAF50' : '#f44336';
+                            drawingContext.lineWidth = 3;
+                            drawingContext.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
+                            
+                            drawingContext.fillStyle = closestMatch.label !== 'unknown' ? '#4CAF50' : '#f44336';
+                            drawingContext.fillRect(faceBox.x, faceBox.y - 30, faceBox.width, 30);
+                            
+                            drawingContext.fillStyle = 'white';
+                            drawingContext.font = 'bold 16px Arial';
+                            const labelText = closestMatch.label !== 'unknown' 
+                                ? closestMatch.label + ' (' + Math.round((1 - closestMatch.distance) * 100) + '%)'
+                                : 'Unknown';
+                            drawingContext.fillText(labelText, faceBox.x + 5, faceBox.y - 10);
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error while detecting faces:', error);
+            }
+
+            // Keep checking for faces
+            requestAnimationFrame(checkForFacesInCamera);
+        }
+
+        // Update the list of registered faces on the screen
+        function updateFaceList() {
+            faceCountBadge.textContent = registeredFaces.length;
+            if (registeredFaces.length === 0) {
+                faceListContainer.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">No faces registered yet</p>';
+                return;
+            }
+            faceListContainer.innerHTML = registeredFaces.map(savedFace => `
+                <div class="face-item">
+                    <img src="${savedFace.image}" alt="${savedFace.name}">
+                    <div class="face-info">
+                        <div class="face-name">${savedFace.name}</div>
+                        <div class="face-time">${savedFace.time}</div>
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteOneFace(${savedFace.id})" style="width:auto;padding:8px 12px;">Delete</button>
+                </div>
+            `).join('');
+        }
+
+        // Delete a single face from the list
+        function deleteOneFace(faceId) {
+            registeredFaces = registeredFaces.filter(savedFace => savedFace.id !== faceId);
+            showUserMessage('Face deleted', 'info');
+            updateFaceList();
+            saveFacesToBrowser();
+        }
+
+        // Delete all registered faces
+        function deleteAllRegisteredFaces() {
+            if (registeredFaces.length === 0) return;
+            
+            if (confirm('Are you sure you want to delete all ' + registeredFaces.length + ' registered faces?')) {
+                registeredFaces = [];
+                updateFaceList();
+                saveFacesToBrowser();
+                showUserMessage('All faces cleared', 'info');
+            }
+        }
+
+        // Show a message to the user
+        function showUserMessage(messageText, messageType = 'info') {
+            messageBox.textContent = messageText;
+            messageBox.className = 'message show';
+            messageBox.style.background = messageType === 'success' ? '#dff0d8' : 
+                                      messageType === 'error' ? '#f2dede' : '#d9edf7';
+            messageBox.style.color = messageType === 'success' ? '#3c763d' : 
+                                 messageType === 'error' ? '#a94442' : '#31708f';
+        }
+
+        // Start everything when the page loads
+        downloadAIModels();
+        loadPreviouslySavedFaces();
+        updateFaceList();
+
+        // Connect all the buttons to their functions
+        registerCameraButton.addEventListener('click', function() {
+            console.log('Register camera button was clicked');
+            toggleCameraOnOff('register');
+        });
+        
+        recognizeCameraButton.addEventListener('click', function() {
+            console.log('Recognize camera button was clicked');
+            toggleCameraOnOff('recognize');
+        });
+        
+        captureButton.addEventListener('click', function() {
+            console.log('Capture button was clicked');
+            registerNewFaceFromCamera();
+        });
+        
+        uploadPhotoButton.addEventListener('click', function() {
+            console.log('Upload photo button was clicked');
+            fileInputField.click();
+        });
+        
+        fileInputField.addEventListener('change', registerNewFaceFromUploadedFile);
+        
+        registerModeButton.addEventListener('click', function() {
+            console.log('Switching to register mode');
+            changeAppMode('register');
+        });
+        
+        recognizeModeButton.addEventListener('click', function() {
+            console.log('Switching to recognize mode');
+            changeAppMode('recognize');
+        });
+        
+        clearAllButton.addEventListener('click', deleteAllRegisteredFaces);
+    </script>
+</body>
+</html>
