@@ -104,7 +104,6 @@
         .btn-success { background: var(--success); color: white; border-color: var(--success); }
         .btn-danger { background: var(--danger); color: white; border-color: var(--danger); }
         .btn-warning { background: var(--warning); color: white; border-color: var(--warning); }
-        .btn-info { background: var(--info); color: white; border-color: var(--info); }
         
         .grid { 
             display: grid; 
@@ -336,11 +335,17 @@
             <h1>Ultimate Face Recognition System</h1>
             <p style="color: var(--text-secondary);">Made By Aakshat Hariharan</p>
             <p style="color: var(--text-secondary); font-size: 12px; margin-top: 5px;">
-                Logged in as: <strong id="currentUserDisplay"></strong>
+                Logged in as: <strong id="currentUserDisplay"></strong> 
+                <button class="btn btn-danger" onclick="logout()" style="padding: 4px 12px; font-size: 12px; margin-left: 10px;">Logout</button>
             </p>
             <div class="header-controls">
                 <button class="btn" onclick="toggleDarkMode()" id="darkModeBtn">Dark Mode</button>
                 <button class="btn btn-warning" onclick="toggleVoice()" id="voiceBtn">Voice: OFF</button>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:center;margin-top:15px;flex-wrap:wrap;">
+                <a href="index.html" class="btn btn-primary" style="text-decoration:none;">Ultimate Version</a>
+                <a href="regular.html" class="btn" style="text-decoration:none;">Regular Version</a>
+                <a href="deepfake.html" class="btn" style="text-decoration:none;">Deepfake Detection</a>
             </div>
         </div>
 
@@ -554,9 +559,9 @@
                     <p style="font-size:12px;color:var(--text-secondary);margin-bottom:15px;">Automatically collect high-quality detections to improve accuracy</p>
                     
                     <div class="slider-container">
-                        <label>Training Quality Threshold: <span id="trainingQualityValue">90%</span></label>
+                        <label>Training Quality Threshold: <span id="trainingQualityValue">60%</span></label>
                         <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">Only collect samples with confidence above this</p>
-                        <input type="range" id="trainingQualitySlider" class="slider" min="80" max="98" value="90">
+                        <input type="range" id="trainingQualitySlider" class="slider" min="50" max="98" value="60">
                     </div>
                     
                     <button class="btn btn-success" onclick="applyTraining()" style="width:100%;margin-top:10px;">Apply Training Data</button>
@@ -691,19 +696,18 @@
         const isAuthenticated = sessionStorage.getItem('isAuthenticated');
         const currentUser = sessionStorage.getItem('currentUser');
 
-        // Always allow access - no authentication required
-        if (isFirstTimeSetup && !isAuthenticated) {
-    sessionStorage.setItem('isAuthenticated', 'true');
-    sessionStorage.setItem('currentUser', 'Setup User');
-    console.log('First-time setup mode - no authentication required');
-}
-else if (!isAuthenticated) {
-    window.location.href = 'signin.html';
-}
-else if (currentUser) {
-    console.log('Welcome, ' + currentUser + '!');
-}
-
+        // Allow access if authenticated OR if it's first-time setup
+        if (!isAuthenticated && !isFirstTimeSetup) {
+            // Redirect to sign-in page if not authenticated and not first-time setup
+            window.location.href = 'signin.html';
+        } else if (isFirstTimeSetup && !isAuthenticated) {
+            // If first-time setup, set a temporary session
+            sessionStorage.setItem('isAuthenticated', 'true');
+            sessionStorage.setItem('currentUser', 'Setup User');
+            console.log('First-time setup mode - no authentication required');
+        } else if (currentUser) {
+            console.log('Welcome, ' + currentUser + '!');
+        }
         // ==============================================================
 
         // Global variables
@@ -732,7 +736,7 @@ else if (currentUser) {
             alertSpecific: false,
             alertPerson: '',
             autoTraining: false,
-            trainingQuality: 90,
+            trainingQuality: 60,
             faceFollowing: false,
             showTrajectory: false,
             anomalyDetection: false,
@@ -753,8 +757,6 @@ else if (currentUser) {
         async function init() {
             // Display current user (or setup mode)
             const userDisplay = document.getElementById('currentUserDisplay');
-            const displayUser = sessionStorage.getItem('currentUser');
-            
             if (isFirstTimeSetup) {
                 userDisplay.textContent = 'First-Time Setup';
                 userDisplay.style.color = '#FF9800';
@@ -762,7 +764,7 @@ else if (currentUser) {
                 // Show setup message
                 showMessage('msgReg', 'Welcome! Register your first face to get started.', 'info');
             } else {
-                userDisplay.textContent = displayUser;
+                userDisplay.textContent = currentUser;
             }
             
             await loadModels();
@@ -772,6 +774,21 @@ else if (currentUser) {
             applySettings();
             updateUI();
             setupEventListeners();
+        }
+
+        // Logout function
+        function logout() {
+            // Check if there are any registered faces
+            if (registeredFaces.length === 0) {
+                alert('You must register at least one face before logging out.');
+                return;
+            }
+            
+            if (confirm('Are you sure you want to logout?')) {
+                sessionStorage.removeItem('isAuthenticated');
+                sessionStorage.removeItem('currentUser');
+                window.location.href = 'signin.html';
+            }
         }
 
         // Load AI models
@@ -946,6 +963,7 @@ else if (currentUser) {
                     <div class="face-info">
                         <div class="face-name">${face.name}</div>
                         <div class="face-time">${face.time}</div>
+                        ${face.imageCount > 1 ? `<div style="font-size:11px;color:var(--info);margin-top:2px;">${face.imageCount} photos in profile</div>` : ''}
                     </div>
                     <button class="btn btn-danger" onclick="deleteFace(${face.id})" style="padding:8px 12px;">Delete</button>
                 </div>
@@ -1189,13 +1207,16 @@ else if (currentUser) {
                 const currentlyVisible = new Set();
 
                 if (detections.length > 0 && registeredFaces.length > 0) {
-                    const matcher = new faceapi.FaceMatcher(
-                        registeredFaces.map(f => new faceapi.LabeledFaceDescriptors(
-                            f.name,
-                            [new Float32Array(f.descriptor)]
-                        )),
-                        settings.confidenceThreshold / 100
-                    );
+                    // Create face matcher with all descriptors for each person
+                    const labeledDescriptors = [];
+                    registeredFaces.forEach(f => {
+                        const descriptors = f.descriptors && f.descriptors.length > 0 
+                            ? f.descriptors.map(d => new Float32Array(d))
+                            : [new Float32Array(f.descriptor)];
+                        labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(f.name, descriptors));
+                    });
+                    
+                    const matcher = new faceapi.FaceMatcher(labeledDescriptors, settings.confidenceThreshold / 100);
 
                     detections.forEach(detection => {
                         const match = matcher.findBestMatch(detection.descriptor);
@@ -1469,16 +1490,33 @@ else if (currentUser) {
                 canvas.getContext('2d').drawImage(video, 0, 0);
                 const image = canvas.toDataURL('image/jpeg', 0.8);
                 
-                registeredFaces.push({
-                    id: Date.now(),
-                    name: name,
-                    image: image,
-                    descriptor: Array.from(detection.descriptor),
-                    time: new Date().toLocaleString()
-                });
+                // Check if person already exists
+                const existingPerson = registeredFaces.find(f => f.name.toLowerCase() === name.toLowerCase());
+                
+                if (existingPerson) {
+                    // Add descriptor to existing profile
+                    if (!existingPerson.descriptors) {
+                        existingPerson.descriptors = [existingPerson.descriptor];
+                    }
+                    existingPerson.descriptors.push(Array.from(detection.descriptor));
+                    existingPerson.imageCount = existingPerson.descriptors.length;
+                    existingPerson.time = new Date().toLocaleString();
+                    showMessage('msgReg', `Added photo ${existingPerson.imageCount} for ${name}!`, 'success');
+                } else {
+                    // Create new profile
+                    registeredFaces.push({
+                        id: Date.now(),
+                        name: name,
+                        image: image,
+                        descriptor: Array.from(detection.descriptor),
+                        descriptors: [Array.from(detection.descriptor)],
+                        imageCount: 1,
+                        time: new Date().toLocaleString()
+                    });
+                    showMessage('msgReg', `Registered ${name} successfully!`, 'success');
+                }
                 
                 document.getElementById('nameInput').value = '';
-                showMessage('msgReg', `Registered ${name} successfully!`, 'success');
                 saveData();
                 updateUI();
             } catch (error) {
@@ -1514,17 +1552,34 @@ else if (currentUser) {
                 
                 const smallImg = await resizeImage(img, 200);
                 
-                registeredFaces.push({
-                    id: Date.now(),
-                    name: name,
-                    image: smallImg,
-                    descriptor: Array.from(detection.descriptor),
-                    time: new Date().toLocaleString()
-                });
+                // Check if person already exists
+                const existingPerson = registeredFaces.find(f => f.name.toLowerCase() === name.toLowerCase());
+                
+                if (existingPerson) {
+                    // Add descriptor to existing profile
+                    if (!existingPerson.descriptors) {
+                        existingPerson.descriptors = [existingPerson.descriptor];
+                    }
+                    existingPerson.descriptors.push(Array.from(detection.descriptor));
+                    existingPerson.imageCount = existingPerson.descriptors.length;
+                    existingPerson.time = new Date().toLocaleString();
+                    showMessage('msgReg', `Added photo ${existingPerson.imageCount} for ${name}!`, 'success');
+                } else {
+                    // Create new profile
+                    registeredFaces.push({
+                        id: Date.now(),
+                        name: name,
+                        image: smallImg,
+                        descriptor: Array.from(detection.descriptor),
+                        descriptors: [Array.from(detection.descriptor)],
+                        imageCount: 1,
+                        time: new Date().toLocaleString()
+                    });
+                    showMessage('msgReg', `Registered ${name} successfully!`, 'success');
+                }
                 
                 document.getElementById('nameInput').value = '';
                 event.target.value = '';
-                showMessage('msgReg', `Registered ${name} successfully!`, 'success');
                 saveData();
                 updateUI();
             } catch (error) {
@@ -2215,7 +2270,7 @@ else if (currentUser) {
             });
         }
 
-        
+        // Start the application
         init();
     </script>
 </body>
