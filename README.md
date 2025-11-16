@@ -1,4 +1,4 @@
-=# Face Recognition Web App
+# *Face Recognition Web App*
 
 A local, fully client-side face recognition system with live detection, face registration, face login, image comparison, anomaly detection, duplicate scanning, and intelligent auto-training.
 
