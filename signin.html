@@ -624,6 +624,16 @@
         // Initialize
         loadRegisteredFaces();
         loadModels();
+
+        // Check if there are no registered faces on page load
+        window.addEventListener('load', () => {
+            if (registeredFaces.length === 0) {
+                showStatus('No faces registered in system. Redirecting to manual sign in...', 'warning');
+                setTimeout(() => {
+                    window.location.href = 'signin.html';
+                }, 2000);
+            }
+        });
     </script>
 </body>
 </html>
