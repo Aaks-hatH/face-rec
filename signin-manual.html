@@ -1,36 +1,58 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign In - Face Recognition System</title>
     <style>
-      
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
+        :root {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: white;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --border-color: #ddd;
+            --accent: #2196F3;
+            --accent-dark: #1976D2;
+        }
+
+        body.dark-mode {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2d2d2d;
+            --text-primary: #e0e0e0;
+            --text-secondary: #b0b0b0;
+            --border-color: #444;
+        }
+
         body {
-            font-family: 'Arial', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: Arial, sans-serif;
+            background: var(--bg-primary);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
+            transition: all 0.3s;
         }
 
         .signin-container {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             width: 100%;
             max-width: 400px;
             padding: 40px;
             animation: slideUp 0.5s ease-out;
+            border: 1px solid var(--border-color);
+        }
+
+        body.dark-mode .signin-container {
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         }
 
         @keyframes slideUp {
@@ -44,6 +66,34 @@
             }
         }
 
+        .header-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            font-size: 18px;
+        }
+
+        .btn-icon:hover {
+            background: var(--bg-primary);
+            transform: scale(1.05);
+        }
+
         .logo {
             text-align: center;
             margin-bottom: 30px;
@@ -52,7 +102,7 @@
         .logo-icon {
             width: 80px;
             height: 80px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--accent);
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -64,7 +114,7 @@
         }
 
         h1 {
-            color: #333;
+            color: var(--text-primary);
             font-size: 28px;
             text-align: center;
             margin-bottom: 10px;
@@ -72,7 +122,7 @@
 
         .subtitle {
             text-align: center;
-            color: #666;
+            color: var(--text-secondary);
             font-size: 14px;
             margin-bottom: 30px;
         }
@@ -83,7 +133,7 @@
 
         label {
             display: block;
-            color: #333;
+            color: var(--text-primary);
             font-size: 14px;
             font-weight: 600;
             margin-bottom: 8px;
@@ -92,40 +142,55 @@
         input {
             width: 100%;
             padding: 12px 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
             font-size: 14px;
             transition: all 0.3s;
-            background: white;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
         }
 
         input:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: var(--accent);
         }
 
         .btn {
             width: 100%;
             padding: 14px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--accent);
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 4px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
             margin-top: 10px;
         }
 
-        .btn:hover {
+        .btn:hover:not(:disabled) {
+            background: var(--accent-dark);
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
 
         .btn:active {
             transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
         }
 
         .remember-forgot {
@@ -140,7 +205,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            color: #666;
+            color: var(--text-secondary);
         }
 
         .remember-me input[type="checkbox"] {
@@ -149,7 +214,7 @@
         }
 
         .forgot-password {
-            color: #667eea;
+            color: var(--accent);
             text-decoration: none;
             font-weight: 500;
         }
@@ -163,7 +228,7 @@
             align-items: center;
             text-align: center;
             margin: 25px 0;
-            color: #999;
+            color: var(--text-secondary);
             font-size: 13px;
         }
 
@@ -171,7 +236,7 @@
         .divider::after {
             content: '';
             flex: 1;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid var(--border-color);
         }
 
         .divider span {
@@ -180,13 +245,13 @@
 
         .signup-link {
             text-align: center;
-            color: #666;
+            color: var(--text-secondary);
             font-size: 14px;
             margin-top: 20px;
         }
 
         .signup-link a {
-            color: #667eea;
+            color: var(--accent);
             text-decoration: none;
             font-weight: 600;
         }
@@ -200,41 +265,40 @@
             border: 1px solid #fcc;
             color: #c33;
             padding: 10px;
-            border-radius: 6px;
+            border-radius: 4px;
             font-size: 13px;
             margin-bottom: 15px;
             display: none;
+        }
+
+        body.dark-mode .error-message {
+            background: #4a2020;
+            border-color: #662020;
+            color: #ff6b6b;
         }
 
         .error-message.show {
             display: block;
         }
 
-        .demo-credentials {
-            background: #f0f7ff;
-            border: 1px solid #d0e7ff;
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            font-size: 12px;
-            color: #0066cc;
-        }
-
-        .demo-credentials strong {
-            display: block;
-            margin-bottom: 5px;
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
         }
     </style>
 </head>
 <body>
+    <div class="header-controls">
+        <button class="btn-icon" onclick="toggleDarkMode()" id="darkModeBtn" title="Toggle Dark Mode">🌙</button>
+    </div>
+
     <div class="signin-container">
         <div class="logo">
             <div class="logo-icon">FR</div>
             <h1>Face Recognition</h1>
             <p class="subtitle">Sign in to access your dashboard</p>
         </div>
-
-        
 
         <div class="error-message" id="errorMessage">
             Invalid username or password
@@ -266,7 +330,7 @@
             <span>or</span>
         </div>
 
-        <button class="btn" style="background: #4285f4;" onclick="alert('Google Sign-In coming soon!')">
+        <button class="btn btn-secondary" onclick="alert('Google Sign-In coming soon!')">
             Sign in with Google
         </button>
 
@@ -276,7 +340,30 @@
     </div>
 
     <script>
-      //This whole website was coded as a joke this does not lead anywhere
+        // Dark mode toggle
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            const btn = document.getElementById('darkModeBtn');
+            btn.textContent = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
+            localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+        }
+
+        // Load dark mode preference
+        window.addEventListener('load', () => {
+            const darkMode = localStorage.getItem('darkMode') === 'true';
+            if (darkMode) {
+                document.body.classList.add('dark-mode');
+                document.getElementById('darkModeBtn').textContent = '☀️';
+            }
+
+            const rememberedUser = localStorage.getItem('rememberedUser');
+            if (rememberedUser) {
+                document.getElementById('username').value = rememberedUser;
+                document.getElementById('remember').checked = true;
+                document.getElementById('password').focus();
+            }
+        });
+
         const signinForm = document.getElementById('signinForm');
         const errorMessage = document.getElementById('errorMessage');
 
@@ -294,31 +381,25 @@
             const password = document.getElementById('password').value;
             const remember = document.getElementById('remember').checked;
 
-            // Validate credentials
             if (validUsers[username] && validUsers[username] === password) {
-                // Store session
                 if (remember) {
                     localStorage.setItem('rememberedUser', username);
                 }
                 sessionStorage.setItem('currentUser', username);
                 sessionStorage.setItem('isAuthenticated', 'true');
 
-                // Show loading state
                 const btn = signinForm.querySelector('.btn');
                 btn.textContent = 'Signing in...';
                 btn.disabled = true;
 
-                // Redirect to loading page after 1 second
                 setTimeout(() => {
                     window.location.href = 'loading.html';
                 }, 1000);
             } else {
-                // Show error
                 errorMessage.classList.add('show');
                 document.getElementById('password').value = '';
                 document.getElementById('password').focus();
 
-                // Shake animation
                 signinForm.style.animation = 'shake 0.5s';
                 setTimeout(() => {
                     signinForm.style.animation = '';
@@ -326,34 +407,12 @@
             }
         });
 
-        // Hide error on input
         document.getElementById('username').addEventListener('input', () => {
             errorMessage.classList.remove('show');
         });
         document.getElementById('password').addEventListener('input', () => {
             errorMessage.classList.remove('show');
         });
-
-        // Check for remembered user
-        window.addEventListener('load', () => {
-            const rememberedUser = localStorage.getItem('rememberedUser');
-            if (rememberedUser) {
-                document.getElementById('username').value = rememberedUser;
-                document.getElementById('remember').checked = true;
-                document.getElementById('password').focus();
-            }
-        });
-
-        // Shake animation
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes shake {
-                0%, 100% { transform: translateX(0); }
-                25% { transform: translateX(-10px); }
-                75% { transform: translateX(10px); }
-            }
-        `;
-        document.head.appendChild(style);
     </script>
 </body>
 </html>
