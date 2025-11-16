@@ -334,6 +334,10 @@
         <div class="header">
             <h1>Ultimate Face Recognition System</h1>
             <p style="color: var(--text-secondary);">Made By Aakshat Hariharan</p>
+            <p style="color: var(--text-secondary); font-size: 12px; margin-top: 5px;">
+                Logged in as: <strong id="currentUserDisplay"></strong> 
+                <button class="btn btn-danger" onclick="logout()" style="padding: 4px 12px; font-size: 12px; margin-left: 10px;">Logout</button>
+            </p>
             <div class="header-controls">
                 <button class="btn" onclick="toggleDarkMode()" id="darkModeBtn">Dark Mode</button>
                 <button class="btn btn-warning" onclick="toggleVoice()" id="voiceBtn">Voice: OFF</button>
@@ -680,15 +684,26 @@
         const isAuthenticated = sessionStorage.getItem('isAuthenticated');
         const currentUser = sessionStorage.getItem('currentUser');
 
-        if (!isAuthenticated || !currentUser) {
-            // Redirect to sign-in page if not authenticated
+        // Check if this is first-time setup (no faces registered)
+        const savedFaces = localStorage.getItem('registeredFaces');
+        const isFirstTimeSetup = !savedFaces || JSON.parse(savedFaces).length === 0;
+
+        // Allow access if authenticated OR if it's first-time setup
+        if (!isAuthenticated && !isFirstTimeSetup) {
+            // Redirect to sign-in page if not authenticated and not first-time setup
             window.location.href = 'signin.html';
             // Stop script execution
             throw new Error('Authentication required');
         }
 
-        // Display welcome message with current user
-        console.log('Welcome, ' + currentUser + '!');
+        // If first-time setup, set a temporary session
+        if (isFirstTimeSetup && !isAuthenticated) {
+            sessionStorage.setItem('isAuthenticated', 'true');
+            sessionStorage.setItem('currentUser', 'Setup User');
+            console.log('First-time setup mode - no authentication required');
+        } else if (currentUser) {
+            console.log('Welcome, ' + currentUser + '!');
+        }
         // ==============================================================
 
         // Global variables
@@ -736,6 +751,9 @@
 
         // Initialize
         async function init() {
+            // Display current user
+            document.getElementById('currentUserDisplay').textContent = currentUser;
+            
             await loadModels();
             await loadCameras();
             loadStoredData();
@@ -743,6 +761,15 @@
             applySettings();
             updateUI();
             setupEventListeners();
+        }
+
+        // Logout function
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                sessionStorage.removeItem('isAuthenticated');
+                sessionStorage.removeItem('currentUser');
+                window.location.href = 'signin.html';
+            }
         }
 
         // Load AI models
