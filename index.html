@@ -675,6 +675,22 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
     <script>
+        // ==================== AUTHENTICATION CHECK ====================
+        // Check if user is authenticated before allowing access
+        const isAuthenticated = sessionStorage.getItem('isAuthenticated');
+        const currentUser = sessionStorage.getItem('currentUser');
+
+        if (!isAuthenticated || !currentUser) {
+            // Redirect to sign-in page if not authenticated
+            window.location.href = 'signin.html';
+            // Stop script execution
+            throw new Error('Authentication required');
+        }
+
+        // Display welcome message with current user
+        console.log('Welcome, ' + currentUser + '!');
+        // ==============================================================
+
         // Global variables
         let cameraStream = null;
         let registeredFaces = [];
