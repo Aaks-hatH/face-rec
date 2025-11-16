@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition Sign In</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .signin-container {
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border: 1px solid #ddd;
+            width: 100%;
+            max-width: 500px;
+            padding: 40px;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo-icon {
+            width: 80px;
+            height: 80px;
+            background: #2196F3;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 15px;
+            color: white;
+            font-size: 40px;
+            font-weight: bold;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 28px;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            min-height: 300px;
+            overflow: hidden;
+        }
+
+        video, canvas {
+            width: 100%;
+            display: block;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover:not(:disabled) {
+            background: #1976D2;
+            transform: scale(1.02);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #5a6268;
+        }
+
+        .btn-danger {
+            background: #f44336;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #d32f2f;
+        }
+
+        .status-message {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status-message.show {
+            display: block;
+        }
+
+        .status-info {
+            background: #d9edf7;
+            color: #31708f;
+            border: 1px solid #bce8f1;
+        }
+
+        .status-success {
+            background: #dff0d8;
+            color: #3c763d;
+            border: 1px solid #d6e9c6;
+        }
+
+        .status-error {
+            background: #f2dede;
+            color: #a94442;
+            border: 1px solid #ebccd1;
+        }
+
+        .status-warning {
+            background: #fcf8e3;
+            color: #8a6d3b;
+            border: 1px solid #faebcc;
+        }
+
+        .instructions {
+            background: #f0f7ff;
+            border: 1px solid #d0e7ff;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #0066cc;
+        }
+
+        .instructions ul {
+            margin: 10px 0 0 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 5px;
+        }
+
+        .recognized-user {
+            background: #f9f9f9;
+            border: 2px solid #4CAF50;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .recognized-user.show {
+            display: block;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #4CAF50;
+        }
+
+        .user-details h3 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .user-details p {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .face-count {
+            text-align: center;
+            color: #666;
+            font-size: 13px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="signin-container">
+        <div class="logo">
+            <div class="logo-icon">FR</div>
+            <h1>Face Recognition Sign In</h1>
+            <p class="subtitle">Look at the camera to sign in</p>
+        </div>
+
+        <div class="instructions">
+            <strong>Instructions:</strong>
+            <ul>
+                <li>Click "Start Camera" to begin</li>
+                <li>Position your face in the frame</li>
+                <li>Wait for recognition (green box = recognized)</li>
+                <li>System will automatically sign you in</li>
+            </ul>
+        </div>
+
+        <div class="status-message" id="statusMessage"></div>
+
+        <div class="video-container" id="videoContainer">
+            <video id="video" autoplay muted playsinline></video>
+            <canvas id="overlay"></canvas>
+        </div>
+
+        <button class="btn" id="startCameraBtn">Start Camera</button>
+        <button class="btn btn-secondary" id="manualSignInBtn">Manual Sign In</button>
+
+        <div class="recognized-user" id="recognizedUser">
+            <div class="user-info">
+                <img class="user-avatar" id="userAvatar" src="" alt="User">
+                <div class="user-details">
+                    <h3 id="userName"></h3>
+                    <p id="userConfidence"></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="face-count">
+            <p>Registered faces in database: <strong id="faceCount">0</strong></p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+    <script>
+        let cameraStream = null;
+        let registeredFaces = [];
+        let aiModelsReady = false;
+        let isDetecting = false;
+        let hasSignedIn = false;
+
+        const videoElement = document.getElementById('video');
+        const overlayCanvas = document.getElementById('overlay');
+        const startCameraBtn = document.getElementById('startCameraBtn');
+        const manualSignInBtn = document.getElementById('manualSignInBtn');
+        const statusMessage = document.getElementById('statusMessage');
+        const recognizedUser = document.getElementById('recognizedUser');
+        const videoContainer = document.getElementById('videoContainer');
+
+        // Load registered faces
+        function loadRegisteredFaces() {
+            try {
+                const savedFaces = localStorage.getItem('registeredFaces');
+                if (savedFaces) {
+                    registeredFaces = JSON.parse(savedFaces);
+                    document.getElementById('faceCount').textContent = registeredFaces.length;
+                    console.log('Loaded ' + registeredFaces.length + ' registered faces');
+                }
+            } catch (error) {
+                console.error('Error loading faces:', error);
+            }
+        }
+
+        // Load AI models
+        async function loadModels() {
+            showStatus('Loading AI models...', 'info');
+            const modelUrl = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+            
+            try {
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri(modelUrl),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(modelUrl),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(modelUrl)
+                ]);
+                aiModelsReady = true;
+                showStatus('AI models loaded successfully', 'success');
+                setTimeout(() => hideStatus(), 2000);
+            } catch (error) {
+                showStatus('Failed to load AI models', 'error');
+                console.error(error);
+            }
+        }
+
+        // Start camera
+        async function startCamera() {
+            if (cameraStream) {
+                stopCamera();
+                return;
+            }
+
+            if (!aiModelsReady) {
+                showStatus('Please wait, AI models are loading...', 'warning');
+                return;
+            }
+
+            if (registeredFaces.length === 0) {
+                showStatus('No faces registered in database. Please register faces first.', 'error');
+                return;
+            }
+
+            try {
+                showStatus('Starting camera...', 'info');
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480 }
+                });
+                
+                videoElement.srcObject = cameraStream;
+                
+                await new Promise(resolve => {
+                    videoElement.onloadedmetadata = () => {
+                        overlayCanvas.width = videoElement.videoWidth;
+                        overlayCanvas.height = videoElement.videoHeight;
+                        resolve();
+                    };
+                });
+
+                startCameraBtn.textContent = 'Stop Camera';
+                startCameraBtn.classList.remove('btn');
+                startCameraBtn.classList.add('btn-danger');
+                showStatus('Camera active - looking for faces...', 'success');
+                
+                isDetecting = true;
+                detectFaces();
+            } catch (error) {
+                showStatus('Camera error: ' + error.message, 'error');
+                console.error(error);
+            }
+        }
+
+        // Stop camera
+        function stopCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+                videoElement.srcObject = null;
+                isDetecting = false;
+                
+                startCameraBtn.textContent = 'Start Camera';
+                startCameraBtn.classList.remove('btn-danger');
+                startCameraBtn.classList.add('btn');
+                
+                const ctx = overlayCanvas.getContext('2d');
+                ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                
+                showStatus('Camera stopped', 'info');
+            }
+        }
+
+        // Detect faces
+        let lastDetection = 0;
+        async function detectFaces() {
+            if (!isDetecting || !cameraStream || hasSignedIn) return;
+
+            const now = Date.now();
+            if (now - lastDetection < 200) {
+                requestAnimationFrame(detectFaces);
+                return;
+            }
+            lastDetection = now;
+
+            try {
+                const detections = await faceapi
+                    .detectAllFaces(videoElement, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptors();
+
+                const ctx = overlayCanvas.getContext('2d');
+                ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+                if (detections.length > 0) {
+                    const matcher = new faceapi.FaceMatcher(
+                        registeredFaces.map(f => new faceapi.LabeledFaceDescriptors(
+                            f.name,
+                            [new Float32Array(f.descriptor)]
+                        )),
+                        0.6
+                    );
+
+                    detections.forEach(detection => {
+                        const match = matcher.findBestMatch(detection.descriptor);
+                        const box = detection.detection.box;
+                        const isUnknown = match.label === 'unknown';
+                        const confidence = Math.round((1 - match.distance) * 100);
+
+                        ctx.strokeStyle = isUnknown ? '#f44336' : '#4CAF50';
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(box.x, box.y, box.width, box.height);
+                        
+                        ctx.fillStyle = isUnknown ? '#f44336' : '#4CAF50';
+                        ctx.fillRect(box.x, box.y - 30, box.width, 30);
+                        
+                        ctx.fillStyle = 'white';
+                        ctx.font = 'bold 16px Arial';
+                        const label = isUnknown ? 'Unknown' : match.label + ' (' + confidence + '%)';
+                        ctx.fillText(label, box.x + 5, box.y - 10);
+
+                        // Sign in if recognized
+                        if (!isUnknown && confidence > 70) {
+                            signInUser(match.label, confidence);
+                        }
+                    });
+                } else {
+                    showStatus('No face detected - please position yourself in frame', 'warning');
+                }
+            } catch (error) {
+                console.error('Detection error:', error);
+            }
+
+            requestAnimationFrame(detectFaces);
+        }
+
+        // Sign in user
+        function signInUser(name, confidence) {
+            if (hasSignedIn) return;
+            
+            hasSignedIn = true;
+            isDetecting = false;
+
+            const face = registeredFaces.find(f => f.name === name);
+            
+            showStatus('Welcome ' + name + '! Signing in...', 'success');
+            
+            document.getElementById('userName').textContent = name;
+            document.getElementById('userConfidence').textContent = 'Confidence: ' + confidence + '%';
+            document.getElementById('userAvatar').src = face.image;
+            recognizedUser.classList.add('show');
+
+            sessionStorage.setItem('currentUser', name);
+            sessionStorage.setItem('isAuthenticated', 'true');
+            sessionStorage.setItem('loginMethod', 'face-recognition');
+            sessionStorage.setItem('loginConfidence', confidence);
+
+            setTimeout(() => {
+                window.location.href = 'loading.html';
+            }, 2000);
+        }
+
+        // Show status message
+        function showStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = 'status-message status-' + type + ' show';
+        }
+
+        // Hide status message
+        function hideStatus() {
+            statusMessage.classList.remove('show');
+        }
+
+        // Manual sign in
+        manualSignInBtn.addEventListener('click', () => {
+            window.location.href = 'signin-manual.html';
+        });
+
+        // Start camera button
+        startCameraBtn.addEventListener('click', startCamera);
+
+        // Initialize
+        loadRegisteredFaces();
+        loadModels();
+    </script>
+</body>
+</html>
