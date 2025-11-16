@@ -696,12 +696,7 @@
             // If first-time setup, set a temporary session
             sessionStorage.setItem('isAuthenticated', 'true');
             sessionStorage.setItem('currentUser', 'Setup User');
-            console.log('First-time setup mode - no authentication required');
-        } else if (!isAuthenticated) {
-            // Set default user if not authenticated
-            sessionStorage.setItem('isAuthenticated', 'true');
-            sessionStorage.setItem('currentUser', 'Guest User');
-            console.log('Guest mode - no authentication required');
+            console.log('First-time setup mode - no authentication required');            
         } else if (currentUser) {
             console.log('Welcome, ' + currentUser + '!');
         }
