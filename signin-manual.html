@@ -330,12 +330,37 @@
             <span>or</span>
         </div>
 
-        <button class="btn btn-secondary" onclick="alert('Google Sign-In coming soon!')">
-            Sign in with Google
+        <button class="btn btn-secondary" onclick="window.location.href='signin-face.html'">
+            Sign in with Face Recognition
         </button>
 
         <div class="signup-link">
-            Don't have an account? <a href="#">Sign up</a>
+            Don't have an account? <a href="#" onclick="showSignupModal(); return false;">Request Access</a>
+        </div>
+    </div>
+
+    <!-- Signup Modal -->
+    <div id="signupModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;">
+        <div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">
+            <div style="background:var(--bg-secondary);padding:30px;border-radius:8px;max-width:400px;width:90%;border:1px solid var(--border-color);">
+                <h2 style="color:var(--text-primary);margin-bottom:15px;text-align:center;">Request Access</h2>
+                <p style="color:var(--text-secondary);font-size:14px;margin-bottom:20px;text-align:center;">
+                    To create an account, you need to register your face first. Please contact an administrator or existing user to register your face in the system.
+                </p>
+                <div style="background:var(--bg-primary);padding:15px;border-radius:4px;margin-bottom:20px;border:1px solid var(--border-color);">
+                    <p style="color:var(--text-primary);font-size:13px;margin-bottom:10px;"><strong>Steps to get access:</strong></p>
+                    <ol style="margin-left:20px;color:var(--text-secondary);font-size:13px;">
+                        <li style="margin-bottom:5px;">Contact an administrator or registered user</li>
+                        <li style="margin-bottom:5px;">Ask them to register your face in the system</li>
+                        <li style="margin-bottom:5px;">Once registered, you can use either face recognition or manual login</li>
+                    </ol>
+                </div>
+                <div id="adminInfo" style="background:var(--bg-primary);padding:15px;border-radius:4px;margin-bottom:20px;border:1px solid var(--border-color);display:none;">
+                    <p style="color:var(--text-primary);font-size:13px;margin-bottom:10px;"><strong>Registered Users:</strong></p>
+                    <ul id="registeredUsersList" style="margin-left:20px;color:var(--text-secondary);font-size:13px;max-height:100px;overflow-y:auto;"></ul>
+                </div>
+                <button class="btn" onclick="closeSignupModal()" style="margin-bottom:0;">Got it</button>
+            </div>
         </div>
     </div>
 
@@ -348,7 +373,42 @@
             localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
         }
 
-        // Load dark mode preference
+        // Show signup modal
+        function showSignupModal() {
+            const modal = document.getElementById('signupModal');
+            modal.style.display = 'block';
+            
+            // Load and display registered users
+            try {
+                const savedFaces = localStorage.getItem('registeredFaces');
+                if (savedFaces) {
+                    const faces = JSON.parse(savedFaces);
+                    if (faces.length > 0) {
+                        const adminInfo = document.getElementById('adminInfo');
+                        const usersList = document.getElementById('registeredUsersList');
+                        adminInfo.style.display = 'block';
+                        usersList.innerHTML = faces.map(f => '<li>' + f.name + '</li>').join('');
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading registered users:', error);
+            }
+        }
+
+        // Close signup modal
+        function closeSignupModal() {
+            document.getElementById('signupModal').style.display = 'none';
+        }
+
+        // Close modal on outside click
+        document.addEventListener('click', function(e) {
+            const modal = document.getElementById('signupModal');
+            if (e.target === modal) {
+                closeSignupModal();
+            }
+        });
+
+        // Load dark mode preference and check for registered users
         window.addEventListener('load', () => {
             const darkMode = localStorage.getItem('darkMode') === 'true';
             if (darkMode) {
@@ -361,6 +421,17 @@
                 document.getElementById('username').value = rememberedUser;
                 document.getElementById('remember').checked = true;
                 document.getElementById('password').focus();
+            }
+
+            // Check if there are any registered faces
+            const savedFaces = localStorage.getItem('registeredFaces');
+            const faces = savedFaces ? JSON.parse(savedFaces) : [];
+            
+            // If no faces registered, show warning
+            if (faces.length === 0) {
+                const errorMessage = document.getElementById('errorMessage');
+                errorMessage.textContent = 'No users registered in the system yet. Please register a face first in the main application.';
+                errorMessage.classList.add('show');
             }
         });
 
