@@ -684,25 +684,47 @@
         let recognitionHistory = [];
         let attendanceLog = [];
         let snapshots = [];
-        let voiceEnabled = false;
-        let confidenceThreshold = 0.6;
-        let detectionSpeed = 200;
         let compareImage1 = null;
         let compareImage2 = null;
-        let alertSpecificPerson = '';
         let lastRecognized = {};
-        let lastLogged = {}; // Track when each person was last logged
-        let activeFaces = {}; // Track currently visible faces
-        let trainingData = {}; // Store training samples
-        let faceTrajectories = {}; // Store face movement paths
-        let anomalies = []; // Store detected anomalies
-        let trainingQualityThreshold = 90;
+        let lastLogged = {};
+        let activeFaces = {};
+        let trainingData = {};
+        let faceTrajectories = {};
+        let anomalies = [];
+        
+        // Settings object to store all preferences
+        let settings = {
+            confidenceThreshold: 60,
+            detectionSpeed: 200,
+            attendanceCooldown: 300000,
+            alertSpecific: false,
+            alertPerson: '',
+            autoTraining: false,
+            trainingQuality: 90,
+            faceFollowing: false,
+            showTrajectory: false,
+            anomalyDetection: false,
+            detectMultipleUnknown: true,
+            detectUnusualTimes: true,
+            detectRapidEntry: true,
+            detectLowConfidence: true,
+            blurUnknown: false,
+            alertUnknown: false,
+            showAgeGender: true,
+            showExpressions: true,
+            showConfidence: true,
+            darkMode: false,
+            voiceEnabled: false
+        };
 
         // Initialize
         async function init() {
             await loadModels();
             await loadCameras();
             loadStoredData();
+            loadSettings();
+            applySettings();
             updateUI();
             setupEventListeners();
         }
@@ -749,7 +771,6 @@
         // Load stored data
         function loadStoredData() {
             try {
-                // Try the shared key first, then fall back to old key for migration
                 let faces = localStorage.getItem('registeredFaces');
                 if (!faces) faces = localStorage.getItem('faces');
                 
@@ -764,10 +785,82 @@
             }
         }
 
+        // Load settings
+        function loadSettings() {
+            try {
+                const saved = localStorage.getItem('settings');
+                if (saved) {
+                    const loaded = JSON.parse(saved);
+                    settings = { ...settings, ...loaded };
+                }
+            } catch (error) {
+                console.error('Failed to load settings:', error);
+            }
+        }
+
+        // Apply settings to UI
+        function applySettings() {
+            // Regular settings
+            document.getElementById('thresholdSlider').value = settings.confidenceThreshold;
+            document.getElementById('thresholdValue').textContent = settings.confidenceThreshold + '%';
+            
+            document.getElementById('speedSlider').value = settings.detectionSpeed;
+            const speed = settings.detectionSpeed <= 200 ? 'Fast' : settings.detectionSpeed <= 500 ? 'Medium' : 'Slow';
+            document.getElementById('speedValue').textContent = `${speed} (${settings.detectionSpeed}ms)`;
+            
+            document.getElementById('cooldownSlider').value = settings.attendanceCooldown;
+            const minutes = Math.round(settings.attendanceCooldown / 60000);
+            document.getElementById('cooldownValue').textContent = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+            
+            document.getElementById('alertSpecific').checked = settings.alertSpecific;
+            document.getElementById('alertPerson').disabled = !settings.alertSpecific;
+            document.getElementById('alertPerson').value = settings.alertPerson;
+            
+            // Recognition options
+            document.getElementById('blurUnknown').checked = settings.blurUnknown;
+            document.getElementById('alertUnknown').checked = settings.alertUnknown;
+            document.getElementById('showAgeGender').checked = settings.showAgeGender;
+            document.getElementById('showExpressions').checked = settings.showExpressions;
+            document.getElementById('showConfidence').checked = settings.showConfidence;
+            
+            // AI Features
+            document.getElementById('autoTraining').checked = settings.autoTraining;
+            document.getElementById('trainingQualitySlider').value = settings.trainingQuality;
+            document.getElementById('trainingQualityValue').textContent = settings.trainingQuality + '%';
+            
+            document.getElementById('faceFollowing').checked = settings.faceFollowing;
+            document.getElementById('showTrajectory').checked = settings.showTrajectory;
+            document.getElementById('anomalyDetection').checked = settings.anomalyDetection;
+            
+            document.getElementById('detectMultipleUnknown').checked = settings.detectMultipleUnknown;
+            document.getElementById('detectUnusualTimes').checked = settings.detectUnusualTimes;
+            document.getElementById('detectRapidEntry').checked = settings.detectRapidEntry;
+            document.getElementById('detectLowConfidence').checked = settings.detectLowConfidence;
+            
+            // Dark mode
+            if (settings.darkMode) {
+                document.body.classList.add('dark-mode');
+                document.getElementById('darkModeBtn').textContent = 'Light Mode';
+            }
+            
+            // Voice
+            if (settings.voiceEnabled) {
+                document.getElementById('voiceBtn').textContent = 'Voice: ON';
+            }
+        }
+
+        // Save settings
+        function saveSettings() {
+            try {
+                localStorage.setItem('settings', JSON.stringify(settings));
+            } catch (error) {
+                console.error('Failed to save settings:', error);
+            }
+        }
+
         // Save data
         function saveData() {
             try {
-                // Use shared key for cross-version compatibility
                 localStorage.setItem('registeredFaces', JSON.stringify(registeredFaces));
                 localStorage.setItem('history', JSON.stringify(recognitionHistory));
                 localStorage.setItem('attendance', JSON.stringify(attendanceLog));
@@ -870,14 +963,12 @@
                 return;
             }
             
-            // Calculate average confidence
             const recognized = recognitionHistory.filter(h => !h.isUnknown);
             const avgConf = recognized.length > 0 
                 ? Math.round(recognized.reduce((sum, h) => sum + h.confidence, 0) / recognized.length)
                 : 0;
             document.getElementById('avgConfidence').textContent = avgConf + '%';
             
-            // Find most frequent
             const nameCounts = {};
             recognized.forEach(h => {
                 nameCounts[h.name] = (nameCounts[h.name] || 0) + 1;
@@ -886,7 +977,6 @@
             document.getElementById('mostFrequent').textContent = sortedNames.length > 0 ? sortedNames[0][0] : '-';
             document.getElementById('totalDetections').textContent = recognitionHistory.length;
             
-            // Top 5 chart
             const top5 = sortedNames.slice(0, 5);
             const maxCount = top5.length > 0 ? top5[0][1] : 1;
             document.getElementById('topRecognized').innerHTML = top5.length > 0 ? top5.map(([name, count]) => `
@@ -922,6 +1012,7 @@
             const select = document.getElementById('alertPerson');
             select.innerHTML = '<option value="">Select person to alert</option>' +
                 registeredFaces.map(f => `<option value="${f.name}">${f.name}</option>`).join('');
+            select.value = settings.alertPerson;
         }
 
         // Switch tabs
@@ -949,18 +1040,21 @@
         function toggleDarkMode() {
             document.body.classList.toggle('dark-mode');
             const btn = document.getElementById('darkModeBtn');
-            btn.textContent = document.body.classList.contains('dark-mode') ? 'Light Mode' : 'Dark Mode';
+            settings.darkMode = document.body.classList.contains('dark-mode');
+            btn.textContent = settings.darkMode ? 'Light Mode' : 'Dark Mode';
+            saveSettings();
         }
 
         // Toggle voice
         function toggleVoice() {
-            voiceEnabled = !voiceEnabled;
-            document.getElementById('voiceBtn').textContent = voiceEnabled ? 'Voice: ON' : 'Voice: OFF';
+            settings.voiceEnabled = !settings.voiceEnabled;
+            document.getElementById('voiceBtn').textContent = settings.voiceEnabled ? 'Voice: ON' : 'Voice: OFF';
+            saveSettings();
         }
 
         // Speak name
         function speak(text) {
-            if (!voiceEnabled || !window.speechSynthesis) return;
+            if (!settings.voiceEnabled || !window.speechSynthesis) return;
             const utterance = new SpeechSynthesisUtterance(text);
             speechSynthesis.speak(utterance);
         }
@@ -1023,13 +1117,12 @@
 
         // Detect faces continuously
         let lastDetection = 0;
-        let attendanceCooldown = 300000; // 5 minutes default
         
         async function detectFaces(video, canvas) {
             if (!isDetecting || !cameraStream) return;
 
             const now = Date.now();
-            if (now - lastDetection < detectionSpeed) {
+            if (now - lastDetection < settings.detectionSpeed) {
                 requestAnimationFrame(() => detectFaces(video, canvas));
                 return;
             }
@@ -1048,17 +1141,7 @@
 
                 document.getElementById('liveCountRec').textContent = `Faces: ${detections.length}`;
 
-                // Track which faces are currently visible
                 const currentlyVisible = new Set();
-
-                // Check display options
-                const showAgeGender = document.getElementById('showAgeGender').checked;
-                const showExpressions = document.getElementById('showExpressions').checked;
-                const showConfidence = document.getElementById('showConfidence').checked;
-                const faceFollowing = document.getElementById('faceFollowing').checked;
-                const showTrajectory = document.getElementById('showTrajectory').checked;
-                const autoTraining = document.getElementById('autoTraining').checked;
-                const anomalyDetection = document.getElementById('anomalyDetection').checked;
 
                 if (detections.length > 0 && registeredFaces.length > 0) {
                     const matcher = new faceapi.FaceMatcher(
@@ -1066,7 +1149,7 @@
                             f.name,
                             [new Float32Array(f.descriptor)]
                         )),
-                        confidenceThreshold
+                        settings.confidenceThreshold / 100
                     );
 
                     detections.forEach(detection => {
@@ -1074,7 +1157,6 @@
                         const box = detection.detection.box;
                         const isUnknown = match.label === 'unknown';
                         
-                        // Get age, gender, and expression
                         const age = Math.round(detection.age);
                         const gender = detection.gender;
                         const genderProb = Math.round(detection.genderProbability * 100);
@@ -1099,19 +1181,16 @@
                             activeFaces[match.label].lastSeen = now;
                             activeFaces[match.label].detectionCount++;
                             
-                            // Track face position for trajectory
-                            if (faceFollowing) {
+                            if (settings.faceFollowing) {
                                 const centerX = box.x + box.width / 2;
                                 const centerY = box.y + box.height / 2;
                                 activeFaces[match.label].positions.push({ x: centerX, y: centerY, time: now });
                                 
-                                // Keep only last 20 positions
                                 if (activeFaces[match.label].positions.length > 20) {
                                     activeFaces[match.label].positions.shift();
                                 }
                                 
-                                // Draw trajectory
-                                if (showTrajectory && activeFaces[match.label].positions.length > 1) {
+                                if (settings.showTrajectory && activeFaces[match.label].positions.length > 1) {
                                     ctx.strokeStyle = '#4CAF50';
                                     ctx.lineWidth = 2;
                                     ctx.beginPath();
@@ -1121,7 +1200,6 @@
                                     });
                                     ctx.stroke();
                                     
-                                    // Draw points
                                     activeFaces[match.label].positions.forEach(pos => {
                                         ctx.fillStyle = '#4CAF50';
                                         ctx.beginPath();
@@ -1131,13 +1209,13 @@
                                 }
                             }
                             
-                            // Auto-training: collect high-quality samples
-                            if (autoTraining && confidence >= trainingQualityThreshold) {
+                            const confidence = Math.round((1 - match.distance) * 100);
+                            
+                            if (settings.autoTraining && confidence >= settings.trainingQuality) {
                                 if (!trainingData[match.label]) {
                                     trainingData[match.label] = [];
                                 }
                                 
-                                // Only store if we don't have too many samples
                                 if (trainingData[match.label].length < 50) {
                                     trainingData[match.label].push({
                                         descriptor: Array.from(detection.descriptor),
@@ -1149,18 +1227,16 @@
                             }
                         }
                         
-                        // Blur if enabled
-                        if (isUnknown && document.getElementById('blurUnknown').checked) {
+                        if (isUnknown && settings.blurUnknown) {
                             ctx.filter = 'blur(20px)';
                             ctx.drawImage(video, box.x, box.y, box.width, box.height, box.x, box.y, box.width, box.height);
                             ctx.filter = 'none';
                         }
                         
-                        // Calculate box height based on what info to display
-                        let infoLines = 1; // Name line
-                        if (showConfidence && !isUnknown) infoLines++;
-                        if (showAgeGender) infoLines++;
-                        if (showExpressions) infoLines++;
+                        let infoLines = 1;
+                        if (settings.showConfidence && !isUnknown) infoLines++;
+                        if (settings.showAgeGender) infoLines++;
+                        if (settings.showExpressions) infoLines++;
                         const boxHeight = 20 + (infoLines * 18);
                         
                         ctx.strokeStyle = isUnknown ? '#f44336' : '#4CAF50';
@@ -1173,29 +1249,25 @@
                         ctx.fillStyle = 'white';
                         let yOffset = box.y - boxHeight + 16;
                         
-                        // Name
                         ctx.font = 'bold 14px Arial';
                         const name = isUnknown ? 'Unknown' : match.label;
                         ctx.fillText(name, box.x + 5, yOffset);
                         yOffset += 18;
                         
-                        // Confidence
-                        if (showConfidence && !isUnknown) {
+                        if (settings.showConfidence && !isUnknown) {
                             const confidence = Math.round((1 - match.distance) * 100);
                             ctx.font = '12px Arial';
                             ctx.fillText(`Confidence: ${confidence}%`, box.x + 5, yOffset);
                             yOffset += 18;
                         }
                         
-                        // Age & Gender
-                        if (showAgeGender) {
+                        if (settings.showAgeGender) {
                             ctx.font = '12px Arial';
                             ctx.fillText(`${age}y, ${gender} (${genderProb}%)`, box.x + 5, yOffset);
                             yOffset += 18;
                         }
                         
-                        // Expression
-                        if (showExpressions) {
+                        if (settings.showExpressions) {
                             ctx.font = '12px Arial';
                             const expressionEmoji = {
                                 'neutral': '😐',
@@ -1209,24 +1281,25 @@
                             ctx.fillText(`${expressionEmoji[dominantExpression] || ''} ${dominantExpression} (${expressionConfidence}%)`, box.x + 5, yOffset);
                         }
                         
-                        // Log recognition with cooldown
                         if (!isUnknown) {
-                            const shouldLog = !lastLogged[match.label] || (now - lastLogged[match.label] > attendanceCooldown);
+                            const shouldLog = !lastLogged[match.label] || (now - lastLogged[match.label] > settings.attendanceCooldown);
                             const confidence = Math.round((1 - match.distance) * 100);
                             
                             if (shouldLog) {
                                 logRecognition(match.label, confidence, isUnknown, age, gender, dominantExpression);
                                 lastLogged[match.label] = now;
+                                
+                                if (settings.anomalyDetection) {
+                                    detectAnomalies(match.label, confidence, now);
+                                }
                             }
                         }
                         
-                        // Voice announcement (once per session)
                         if (!isUnknown && !lastRecognized[match.label]) {
                             speak(`Hello ${match.label}`);
                             lastRecognized[match.label] = now;
                         }
                         
-                        // Keep voice recognition active for 30 seconds after last detection
                         if (!isUnknown && activeFaces[match.label]) {
                             clearTimeout(activeFaces[match.label].voiceTimeout);
                             activeFaces[match.label].voiceTimeout = setTimeout(() => {
@@ -1234,16 +1307,14 @@
                             }, 30000);
                         }
                         
-                        // Alert for unknown faces (with cooldown)
-                        if (isUnknown && document.getElementById('alertUnknown').checked) {
+                        if (isUnknown && settings.alertUnknown) {
                             if (!lastRecognized['unknown'] || (now - lastRecognized['unknown'] > 10000)) {
                                 alert('Unknown face detected!');
                                 lastRecognized['unknown'] = now;
                             }
                         }
                         
-                        // Alert for specific person (with cooldown)
-                        if (alertSpecificPerson && match.label === alertSpecificPerson) {
+                        if (settings.alertSpecific && settings.alertPerson && match.label === settings.alertPerson) {
                             if (!lastRecognized['alert_' + match.label] || (now - lastRecognized['alert_' + match.label] > 10000)) {
                                 alert(`${match.label} detected!`);
                                 lastRecognized['alert_' + match.label] = now;
@@ -1256,7 +1327,7 @@
                         const age = Math.round(detection.age);
                         const gender = detection.gender;
                         
-                        const boxHeight = showAgeGender ? 45 : 25;
+                        const boxHeight = settings.showAgeGender ? 45 : 25;
                         
                         ctx.strokeStyle = '#FF9800';
                         ctx.lineWidth = 2;
@@ -1269,14 +1340,13 @@
                         ctx.font = '14px Arial';
                         ctx.fillText('No faces registered', box.x + 5, box.y - boxHeight + 16);
                         
-                        if (showAgeGender) {
+                        if (settings.showAgeGender) {
                             ctx.font = '12px Arial';
                             ctx.fillText(`${age}y, ${gender}`, box.x + 5, box.y - boxHeight + 34);
                         }
                     });
                 }
 
-                // Clean up faces that haven't been seen in 3 seconds
                 Object.keys(activeFaces).forEach(name => {
                     if (!currentlyVisible.has(name) && (now - activeFaces[name].lastSeen > 3000)) {
                         delete activeFaces[name];
@@ -1295,7 +1365,6 @@
             const timestamp = new Date().toLocaleString();
             const date = new Date().toLocaleDateString();
             
-            // Add to history (for tracking all detections)
             recognitionHistory.push({
                 name: isUnknown ? 'Unknown Person' : name,
                 confidence: confidence,
@@ -1306,7 +1375,6 @@
                 expression: expression || 'N/A'
             });
             
-            // Add to attendance only if not unknown and this is a new visit
             if (!isUnknown) {
                 attendanceLog.push({
                     name: name,
@@ -1726,6 +1794,7 @@
                 history: recognitionHistory,
                 attendance: attendanceLog,
                 snapshots: snapshots,
+                settings: settings,
                 timestamp: new Date().toISOString()
             };
             
@@ -1759,6 +1828,11 @@
                     recognitionHistory = backup.history || [];
                     attendanceLog = backup.attendance || [];
                     snapshots = backup.snapshots || [];
+                    if (backup.settings) {
+                        settings = { ...settings, ...backup.settings };
+                        saveSettings();
+                        applySettings();
+                    }
                     saveData();
                     updateUI();
                     alert('Data restored successfully!');
@@ -1787,30 +1861,58 @@
             document.getElementById('startCamRec').addEventListener('click', () => startCamera('videoRec', 'recognize'));
             document.getElementById('captureSnapshot').addEventListener('click', captureSnapshot);
             
-            // Settings
+            // Recognition options - save settings on change
+            document.getElementById('blurUnknown').addEventListener('change', (e) => {
+                settings.blurUnknown = e.target.checked;
+                saveSettings();
+            });
+            document.getElementById('alertUnknown').addEventListener('change', (e) => {
+                settings.alertUnknown = e.target.checked;
+                saveSettings();
+            });
+            document.getElementById('showAgeGender').addEventListener('change', (e) => {
+                settings.showAgeGender = e.target.checked;
+                saveSettings();
+            });
+            document.getElementById('showExpressions').addEventListener('change', (e) => {
+                settings.showExpressions = e.target.checked;
+                saveSettings();
+            });
+            document.getElementById('showConfidence').addEventListener('change', (e) => {
+                settings.showConfidence = e.target.checked;
+                saveSettings();
+            });
+            
+            // Settings tab
             document.getElementById('thresholdSlider').addEventListener('input', (e) => {
-                confidenceThreshold = e.target.value / 100;
+                settings.confidenceThreshold = parseInt(e.target.value);
                 document.getElementById('thresholdValue').textContent = e.target.value + '%';
+                saveSettings();
             });
             
             document.getElementById('speedSlider').addEventListener('input', (e) => {
-                detectionSpeed = parseInt(e.target.value);
-                const speed = detectionSpeed <= 200 ? 'Fast' : detectionSpeed <= 500 ? 'Medium' : 'Slow';
-                document.getElementById('speedValue').textContent = `${speed} (${detectionSpeed}ms)`;
+                settings.detectionSpeed = parseInt(e.target.value);
+                const speed = settings.detectionSpeed <= 200 ? 'Fast' : settings.detectionSpeed <= 500 ? 'Medium' : 'Slow';
+                document.getElementById('speedValue').textContent = `${speed} (${settings.detectionSpeed}ms)`;
+                saveSettings();
             });
             
             document.getElementById('cooldownSlider').addEventListener('input', (e) => {
-                attendanceCooldown = parseInt(e.target.value);
-                const minutes = Math.round(attendanceCooldown / 60000);
+                settings.attendanceCooldown = parseInt(e.target.value);
+                const minutes = Math.round(settings.attendanceCooldown / 60000);
                 document.getElementById('cooldownValue').textContent = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+                saveSettings();
             });
             
             document.getElementById('alertSpecific').addEventListener('change', (e) => {
+                settings.alertSpecific = e.target.checked;
                 document.getElementById('alertPerson').disabled = !e.target.checked;
+                saveSettings();
             });
             
             document.getElementById('alertPerson').addEventListener('change', (e) => {
-                alertSpecificPerson = e.target.value;
+                settings.alertPerson = e.target.value;
+                saveSettings();
             });
             
             document.getElementById('restoreInput').addEventListener('change', handleRestore);
@@ -1819,10 +1921,51 @@
             handleCompareUpload('compare1', 'preview1', 1);
             handleCompareUpload('compare2', 'preview2', 2);
             
-            // AI Features
+            // AI Features - save settings on change
+            document.getElementById('autoTraining').addEventListener('change', (e) => {
+                settings.autoTraining = e.target.checked;
+                saveSettings();
+            });
+            
             document.getElementById('trainingQualitySlider').addEventListener('input', (e) => {
-                trainingQualityThreshold = parseInt(e.target.value);
+                settings.trainingQuality = parseInt(e.target.value);
                 document.getElementById('trainingQualityValue').textContent = e.target.value + '%';
+                saveSettings();
+            });
+            
+            document.getElementById('faceFollowing').addEventListener('change', (e) => {
+                settings.faceFollowing = e.target.checked;
+                saveSettings();
+            });
+            
+            document.getElementById('showTrajectory').addEventListener('change', (e) => {
+                settings.showTrajectory = e.target.checked;
+                saveSettings();
+            });
+            
+            document.getElementById('anomalyDetection').addEventListener('change', (e) => {
+                settings.anomalyDetection = e.target.checked;
+                saveSettings();
+            });
+            
+            document.getElementById('detectMultipleUnknown').addEventListener('change', (e) => {
+                settings.detectMultipleUnknown = e.target.checked;
+                saveSettings();
+            });
+            
+            document.getElementById('detectUnusualTimes').addEventListener('change', (e) => {
+                settings.detectUnusualTimes = e.target.checked;
+                saveSettings();
+            });
+            
+            document.getElementById('detectRapidEntry').addEventListener('change', (e) => {
+                settings.detectRapidEntry = e.target.checked;
+                saveSettings();
+            });
+            
+            document.getElementById('detectLowConfidence').addEventListener('change', (e) => {
+                settings.detectLowConfidence = e.target.checked;
+                saveSettings();
             });
         }
         
@@ -1830,17 +1973,14 @@
         
         // Update AI Features tab
         function updateAIFeatures() {
-            // Count total training samples
             let totalSamples = 0;
             Object.values(trainingData).forEach(samples => {
                 totalSamples += samples.length;
             });
             document.getElementById('trainingCount').textContent = totalSamples;
             
-            // Update tracked faces count
             document.getElementById('trackedFaces').textContent = Object.keys(activeFaces).length;
             
-            // Update anomaly log
             updateAnomalyLog();
         }
         
@@ -1855,7 +1995,6 @@
             Object.keys(trainingData).forEach(name => {
                 const face = registeredFaces.find(f => f.name === name);
                 if (face && trainingData[name].length > 0) {
-                    // Average the descriptors to create improved descriptor
                     const avgDescriptor = new Array(128).fill(0);
                     trainingData[name].forEach(sample => {
                         sample.descriptor.forEach((val, idx) => {
@@ -1889,32 +2028,28 @@
         function detectAnomalies(name, confidence, timestamp) {
             const hour = new Date(timestamp).getHours();
             
-            // Check unusual time access (outside 6 AM - 10 PM)
-            if (document.getElementById('detectUnusualTimes').checked) {
+            if (settings.detectUnusualTimes) {
                 if (hour < 6 || hour > 22) {
                     addAnomaly('Unusual Time Access', `${name} detected at ${new Date(timestamp).toLocaleTimeString()}`);
                 }
             }
             
-            // Check low confidence
-            if (document.getElementById('detectLowConfidence').checked) {
+            if (settings.detectLowConfidence) {
                 if (confidence < 70) {
                     addAnomaly('Low Confidence Detection', `${name} detected with ${confidence}% confidence`);
                 }
             }
             
-            // Check rapid entry/exit
-            if (document.getElementById('detectRapidEntry').checked) {
+            if (settings.detectRapidEntry) {
                 if (activeFaces[name]) {
                     const duration = timestamp - activeFaces[name].firstSeen;
-                    if (duration < 5000) { // Less than 5 seconds
+                    if (duration < 5000) {
                         addAnomaly('Rapid Entry/Exit', `${name} stayed for only ${Math.round(duration/1000)} seconds`);
                     }
                 }
             }
             
-            // Check multiple unknown faces
-            if (document.getElementById('detectMultipleUnknown').checked) {
+            if (settings.detectMultipleUnknown) {
                 const recentUnknown = recognitionHistory.filter(h => 
                     h.isUnknown && (Date.now() - new Date(h.timestamp).getTime() < 60000)
                 ).length;
@@ -1933,7 +2068,6 @@
                 timestamp: new Date().toLocaleString()
             };
             
-            // Check if similar anomaly exists in last 5 minutes
             const isDuplicate = anomalies.some(a => 
                 a.type === type && 
                 a.description === description &&
@@ -1993,7 +2127,7 @@
                     const desc2 = new Float32Array(registeredFaces[j].descriptor);
                     const distance = faceapi.euclideanDistance(desc1, desc2);
                     
-                    if (distance < 0.4) { // Very similar faces
+                    if (distance < 0.4) {
                         group.push(j);
                         checked.add(j);
                     }
