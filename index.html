@@ -680,24 +680,28 @@
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
     <script>
         // ==================== AUTHENTICATION CHECK ====================
-        // Check if user is authenticated before allowing access
+        // Check if this is first-time setup (no faces registered)
+        let savedFaces = null;
+        let isFirstTimeSetup = false;
+        
+        try {
+            savedFaces = localStorage.getItem('registeredFaces');
+            isFirstTimeSetup = !savedFaces || JSON.parse(savedFaces).length === 0;
+        } catch (error) {
+            console.error('Error checking registered faces:', error);
+            isFirstTimeSetup = true;
+        }
+
+        // Check if user is authenticated
         const isAuthenticated = sessionStorage.getItem('isAuthenticated');
         const currentUser = sessionStorage.getItem('currentUser');
-
-        // Check if this is first-time setup (no faces registered)
-        const savedFaces = localStorage.getItem('registeredFaces');
-        const isFirstTimeSetup = !savedFaces || JSON.parse(savedFaces).length === 0;
 
         // Allow access if authenticated OR if it's first-time setup
         if (!isAuthenticated && !isFirstTimeSetup) {
             // Redirect to sign-in page if not authenticated and not first-time setup
             window.location.href = 'signin.html';
-            // Stop script execution
-            throw new Error('Authentication required');
-        }
-
-        // If first-time setup, set a temporary session
-        if (isFirstTimeSetup && !isAuthenticated) {
+        } else if (isFirstTimeSetup && !isAuthenticated) {
+            // If first-time setup, set a temporary session
             sessionStorage.setItem('isAuthenticated', 'true');
             sessionStorage.setItem('currentUser', 'Setup User');
             console.log('First-time setup mode - no authentication required');
@@ -751,8 +755,17 @@
 
         // Initialize
         async function init() {
-            // Display current user
-            document.getElementById('currentUserDisplay').textContent = currentUser;
+            // Display current user (or setup mode)
+            const userDisplay = document.getElementById('currentUserDisplay');
+            if (isFirstTimeSetup) {
+                userDisplay.textContent = 'First-Time Setup';
+                userDisplay.style.color = '#FF9800';
+                
+                // Show setup message
+                showMessage('msgReg', 'Welcome! Register your first face to get started.', 'info');
+            } else {
+                userDisplay.textContent = currentUser;
+            }
             
             await loadModels();
             await loadCameras();
@@ -765,6 +778,12 @@
 
         // Logout function
         function logout() {
+            // Check if there are any registered faces
+            if (registeredFaces.length === 0) {
+                alert('You must register at least one face before logging out.');
+                return;
+            }
+            
             if (confirm('Are you sure you want to logout?')) {
                 sessionStorage.removeItem('isAuthenticated');
                 sessionStorage.removeItem('currentUser');
