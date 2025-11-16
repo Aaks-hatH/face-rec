@@ -693,13 +693,17 @@
 
         // Always allow access - no authentication required
         if (isFirstTimeSetup && !isAuthenticated) {
-            // If first-time setup, set a temporary session
-            sessionStorage.setItem('isAuthenticated', 'true');
-            sessionStorage.setItem('currentUser', 'Setup User');
-            console.log('First-time setup mode - no authentication required');            
-        } else if (currentUser) {
-            console.log('Welcome, ' + currentUser + '!');
-        }
+    sessionStorage.setItem('isAuthenticated', 'true');
+    sessionStorage.setItem('currentUser', 'Setup User');
+    console.log('First-time setup mode - no authentication required');
+}
+else if (!isAuthenticated) {
+    window.location.href = 'signin.html';
+}
+else if (currentUser) {
+    console.log('Welcome, ' + currentUser + '!');
+}
+
         // ==============================================================
 
         // Global variables
@@ -749,7 +753,7 @@
         async function init() {
             // Display current user (or setup mode)
             const userDisplay = document.getElementById('currentUserDisplay');
-            const displayUser = sessionStorage.getItem('currentUser') || 'Guest User';
+            const displayUser = sessionStorage.getItem('currentUser');
             
             if (isFirstTimeSetup) {
                 userDisplay.textContent = 'First-Time Setup';
