@@ -383,6 +383,28 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
     <script>
+        // ==================== INDEXEDDB WRAPPER ====================
+        const DB_NAME = 'facerecDB', DB_VERSION = 1, DB_STORE = 'kvstore';
+        let _db = null;
+        function openDB() {
+            return new Promise((res, rej) => {
+                if (_db) { res(_db); return; }
+                const r = indexedDB.open(DB_NAME, DB_VERSION);
+                r.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
+                r.onsuccess = e => { _db = e.target.result; res(_db); };
+                r.onerror = e => rej(e.target.error);
+            });
+        }
+        async function dbGet(key) {
+            const db = await openDB();
+            return new Promise((res, rej) => {
+                const r = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).get(key);
+                r.onsuccess = () => res(r.result ?? null);
+                r.onerror = () => rej(r.error);
+            });
+        }
+        // ============================================================
+
         // Dark mode toggle
         function toggleDarkMode() {
             document.body.classList.toggle('dark-mode');
@@ -415,14 +437,11 @@
         const videoContainer = document.getElementById('videoContainer');
 
         // Load registered faces
-        function loadRegisteredFaces() {
+        async function loadRegisteredFaces() {
             try {
-                const savedFaces = localStorage.getItem('registeredFaces');
-                if (savedFaces) {
-                    registeredFaces = JSON.parse(savedFaces);
-                    document.getElementById('faceCount').textContent = registeredFaces.length;
-                    console.log('Loaded ' + registeredFaces.length + ' registered faces');
-                }
+                registeredFaces = (await dbGet('registeredFaces')) || [];
+                document.getElementById('faceCount').textContent = registeredFaces.length;
+                console.log('Loaded ' + registeredFaces.length + ' registered faces');
             } catch (error) {
                 console.error('Error loading faces:', error);
             }
