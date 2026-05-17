@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1090,32 +1089,49 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
     <script>
-        // ==================== AUTHENTICATION CHECK ====================
-        // Check if this is first-time setup (no faces registered)
-        let savedFaces = null;
-        let isFirstTimeSetup = false;
-        
-        try {
-            savedFaces = localStorage.getItem('registeredFaces');
-            isFirstTimeSetup = !savedFaces || JSON.parse(savedFaces).length === 0;
-        } catch (error) {
-            console.error('Error checking registered faces:', error);
-            isFirstTimeSetup = true;
+        // ==================== INDEXEDDB WRAPPER ====================
+        // Replaces localStorage for face data — no 5 MB quota, no silent failures
+        const DB_NAME = 'facerecDB', DB_VERSION = 1, DB_STORE = 'kvstore';
+        let _db = null;
+        function openDB() {
+            return new Promise((res, rej) => {
+                if (_db) { res(_db); return; }
+                const r = indexedDB.open(DB_NAME, DB_VERSION);
+                r.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
+                r.onsuccess = e => { _db = e.target.result; res(_db); };
+                r.onerror = e => rej(e.target.error);
+            });
         }
+        async function dbGet(key) {
+            const db = await openDB();
+            return new Promise((res, rej) => {
+                const r = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).get(key);
+                r.onsuccess = () => res(r.result ?? null);
+                r.onerror = () => rej(r.error);
+            });
+        }
+        async function dbSet(key, value) {
+            const db = await openDB();
+            return new Promise((res, rej) => {
+                const tx = db.transaction(DB_STORE, 'readwrite');
+                tx.objectStore(DB_STORE).put(value, key);
+                tx.oncomplete = res;
+                tx.onerror = () => rej(tx.error);
+            });
+        }
+        // ============================================================
 
-        // Check if user is authenticated
+        // ==================== AUTHENTICATION CHECK ====================
+        // Uses a tiny localStorage flag — only 'true'/'false', no quota risk
+        const isFirstTimeSetup = localStorage.getItem('hasFaces') !== 'true';
         const isAuthenticated = sessionStorage.getItem('isAuthenticated');
         const currentUser = sessionStorage.getItem('currentUser');
 
-        // Allow access if authenticated OR if it's first-time setup
         if (!isAuthenticated && !isFirstTimeSetup) {
-            // Redirect to sign-in page if not authenticated and not first-time setup
             window.location.href = 'signin.html';
         } else if (isFirstTimeSetup && !isAuthenticated) {
-            // If first-time setup, set a temporary session
             sessionStorage.setItem('isAuthenticated', 'true');
             sessionStorage.setItem('currentUser', 'Setup User');
-            console.log('First-time setup mode - no authentication required');
         } else if (currentUser) {
             console.log('Welcome, ' + currentUser + '!');
         }
@@ -1180,7 +1196,7 @@
             
             await loadModels();
             await loadCameras();
-            loadStoredData();
+            await loadStoredData();
             loadSettings();
             applySettings();
             updateUI();
@@ -1241,18 +1257,38 @@
             }
         }
 
-        // Load stored data
-        function loadStoredData() {
+        // Load stored data (async — reads from IndexedDB, migrates old localStorage data on first run)
+        async function loadStoredData() {
             try {
-                let faces = localStorage.getItem('registeredFaces');
-                if (!faces) faces = localStorage.getItem('faces');
-                
-                registeredFaces = JSON.parse(faces || '[]');
-                recognitionHistory = JSON.parse(localStorage.getItem('history') || '[]');
-                attendanceLog = JSON.parse(localStorage.getItem('attendance') || '[]');
-                snapshots = JSON.parse(localStorage.getItem('snapshots') || '[]');
-                trainingData = JSON.parse(localStorage.getItem('trainingData') || '{}');
-                anomalies = JSON.parse(localStorage.getItem('anomalies') || '[]');
+                // One-time migration from localStorage → IndexedDB
+                const migrations = [
+                    ['registeredFaces', 'registeredFaces'], ['faces', 'registeredFaces'],
+                    ['history', 'history'], ['attendance', 'attendance'],
+                    ['snapshots', 'snapshots'], ['trainingData', 'trainingData'],
+                    ['anomalies', 'anomalies']
+                ];
+                for (const [lsKey, dbKey] of migrations) {
+                    const lsVal = localStorage.getItem(lsKey);
+                    if (lsVal) {
+                        try {
+                            const parsed = JSON.parse(lsVal);
+                            // Only migrate if IndexedDB doesn't already have this key
+                            const existing = await dbGet(dbKey);
+                            if (!existing) await dbSet(dbKey, parsed);
+                        } catch (_) {}
+                        localStorage.removeItem(lsKey);
+                    }
+                }
+
+                registeredFaces = (await dbGet('registeredFaces')) || [];
+                recognitionHistory = (await dbGet('history')) || [];
+                attendanceLog = (await dbGet('attendance')) || [];
+                snapshots = (await dbGet('snapshots')) || [];
+                trainingData = (await dbGet('trainingData')) || {};
+                anomalies = (await dbGet('anomalies')) || [];
+
+                // Sync the hasFaces flag
+                localStorage.setItem('hasFaces', registeredFaces.length > 0 ? 'true' : 'false');
             } catch (error) {
                 console.error('Failed to load data:', error);
             }
@@ -1331,18 +1367,16 @@
             }
         }
 
-        // Save data
+        // Save data (fire-and-forget async — IndexedDB has no quota limit)
         function saveData() {
-            try {
-                localStorage.setItem('registeredFaces', JSON.stringify(registeredFaces));
-                localStorage.setItem('history', JSON.stringify(recognitionHistory));
-                localStorage.setItem('attendance', JSON.stringify(attendanceLog));
-                localStorage.setItem('snapshots', JSON.stringify(snapshots));
-                localStorage.setItem('trainingData', JSON.stringify(trainingData));
-                localStorage.setItem('anomalies', JSON.stringify(anomalies));
-            } catch (error) {
-                console.error('Failed to save data:', error);
-            }
+            dbSet('registeredFaces', registeredFaces).catch(e => console.error('Save error:', e));
+            dbSet('history', recognitionHistory).catch(e => console.error('Save error:', e));
+            dbSet('attendance', attendanceLog).catch(e => console.error('Save error:', e));
+            dbSet('snapshots', snapshots).catch(e => console.error('Save error:', e));
+            dbSet('trainingData', trainingData).catch(e => console.error('Save error:', e));
+            dbSet('anomalies', anomalies).catch(e => console.error('Save error:', e));
+            // Keep hasFaces flag in sync — tiny string, no quota risk
+            localStorage.setItem('hasFaces', registeredFaces.length > 0 ? 'true' : 'false');
         }
 
         // Update all UI elements
@@ -2017,14 +2051,23 @@
                     if (detection) {
                         const fileName = files[i].name.replace(/\.[^/.]+$/, "");
                         const smallImg = await resizeImage(img, 200);
-                        
-                        registeredFaces.push({
-                            id: Date.now() + i,
-                            name: fileName,
-                            image: smallImg,
-                            descriptor: Array.from(detection.descriptor),
-                            time: new Date().toLocaleString()
-                        });
+                        const desc = Array.from(detection.descriptor);
+                        const existing = registeredFaces.find(f => f.name.toLowerCase() === fileName.toLowerCase());
+                        if (existing) {
+                            if (!existing.descriptors) existing.descriptors = [existing.descriptor];
+                            existing.descriptors.push(desc);
+                            existing.imageCount = existing.descriptors.length;
+                        } else {
+                            registeredFaces.push({
+                                id: Date.now() + i,
+                                name: fileName,
+                                image: smallImg,
+                                descriptor: desc,
+                                descriptors: [desc],
+                                imageCount: 1,
+                                time: new Date().toLocaleString()
+                            });
+                        }
                         successCount++;
                     }
                 } catch (error) {
@@ -2057,14 +2100,23 @@
                     if (detection) {
                         const fileName = files[i].name.replace(/\.[^/.]+$/, "");
                         const smallImg = await resizeImage(img, 200);
-                        
-                        registeredFaces.push({
-                            id: Date.now() + i,
-                            name: fileName,
-                            image: smallImg,
-                            descriptor: Array.from(detection.descriptor),
-                            time: new Date().toLocaleString()
-                        });
+                        const desc = Array.from(detection.descriptor);
+                        const existing = registeredFaces.find(f => f.name.toLowerCase() === fileName.toLowerCase());
+                        if (existing) {
+                            if (!existing.descriptors) existing.descriptors = [existing.descriptor];
+                            existing.descriptors.push(desc);
+                            existing.imageCount = existing.descriptors.length;
+                        } else {
+                            registeredFaces.push({
+                                id: Date.now() + i,
+                                name: fileName,
+                                image: smallImg,
+                                descriptor: desc,
+                                descriptors: [desc],
+                                imageCount: 1,
+                                time: new Date().toLocaleString()
+                            });
+                        }
                         successCount++;
                     }
                 } catch (error) {
@@ -2503,27 +2555,33 @@
             }
             
             let improvedCount = 0;
+            let totalAdded = 0;
             Object.keys(trainingData).forEach(name => {
                 const face = registeredFaces.find(f => f.name === name);
                 if (face && trainingData[name].length > 0) {
-                    const avgDescriptor = new Array(128).fill(0);
+                    // Ensure the face has a descriptors array
+                    if (!face.descriptors) face.descriptors = [face.descriptor];
+
+                    // Add training samples as additional descriptors for multi-angle robustness.
+                    // Deduplicate: skip samples that are too similar to an existing descriptor.
                     trainingData[name].forEach(sample => {
-                        sample.descriptor.forEach((val, idx) => {
-                            avgDescriptor[idx] += val;
-                        });
+                        const newDesc = new Float32Array(sample.descriptor);
+                        const isDuplicate = face.descriptors.some(existing =>
+                            faceapi.euclideanDistance(new Float32Array(existing), newDesc) < 0.15
+                        );
+                        if (!isDuplicate) {
+                            face.descriptors.push(sample.descriptor);
+                            totalAdded++;
+                        }
                     });
-                    
-                    avgDescriptor.forEach((val, idx) => {
-                        avgDescriptor[idx] /= trainingData[name].length;
-                    });
-                    
-                    face.descriptor = avgDescriptor;
+
+                    face.imageCount = face.descriptors.length;
                     improvedCount++;
                 }
             });
             
             saveData();
-            alert(`Improved ${improvedCount} face registrations with training data`);
+            alert(`Updated ${improvedCount} profile${improvedCount !== 1 ? 's' : ''} with ${totalAdded} new descriptor${totalAdded !== 1 ? 's' : ''} from training data.`);
         }
         
         // Clear training data
