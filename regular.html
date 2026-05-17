@@ -254,6 +254,37 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
     <script>
+        // ==================== INDEXEDDB WRAPPER ====================
+        const DB_NAME = 'facerecDB', DB_VERSION = 1, DB_STORE = 'kvstore';
+        let _db = null;
+        function openDB() {
+            return new Promise((res, rej) => {
+                if (_db) { res(_db); return; }
+                const r = indexedDB.open(DB_NAME, DB_VERSION);
+                r.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
+                r.onsuccess = e => { _db = e.target.result; res(_db); };
+                r.onerror = e => rej(e.target.error);
+            });
+        }
+        async function dbGet(key) {
+            const db = await openDB();
+            return new Promise((res, rej) => {
+                const r = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).get(key);
+                r.onsuccess = () => res(r.result ?? null);
+                r.onerror = () => rej(r.error);
+            });
+        }
+        async function dbSet(key, value) {
+            const db = await openDB();
+            return new Promise((res, rej) => {
+                const tx = db.transaction(DB_STORE, 'readwrite');
+                tx.objectStore(DB_STORE).put(value, key);
+                tx.oncomplete = res;
+                tx.onerror = () => rej(tx.error);
+            });
+        }
+        // ============================================================
+
         let cameraStream = null;
         let registeredFaces = [];
         let aiModelsReady = false;
@@ -279,27 +310,19 @@
         const recognizeModeSection = document.getElementById('recognizeMode');
         const clearAllButton = document.getElementById('clearAllBtn');
 
-        function loadPreviouslySavedFaces() {
+        async function loadPreviouslySavedFaces() {
             try {
-                const savedFacesData = localStorage.getItem('registeredFaces');
-                if (savedFacesData) {
-                    registeredFaces = JSON.parse(savedFacesData);
-                    updateFaceList();
-                    console.log('Successfully loaded ' + registeredFaces.length + ' faces from previous session');
-                }
+                registeredFaces = (await dbGet('registeredFaces')) || [];
+                updateFaceList();
+                console.log('Successfully loaded ' + registeredFaces.length + ' faces from previous session');
             } catch (error) {
                 console.error('Could not load saved faces:', error);
             }
         }
 
         function saveFacesToBrowser() {
-            try {
-                localStorage.setItem('registeredFaces', JSON.stringify(registeredFaces));
-                console.log('Successfully saved ' + registeredFaces.length + ' faces');
-            } catch (error) {
-                console.error('Could not save faces:', error);
-                showUserMessage('Warning: Could not save to storage', 'error');
-            }
+            dbSet('registeredFaces', registeredFaces).catch(e => console.error('Could not save faces:', e));
+            localStorage.setItem('hasFaces', registeredFaces.length > 0 ? 'true' : 'false');
         }
 
         async function downloadAIModels() {
